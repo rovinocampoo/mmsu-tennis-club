@@ -1,0 +1,19 @@
+# Local environment files (keep example files under version control)
+.env
+.env.*
+!.env.example
+
+# Node.js / Next.js
+node_modules/
+.next/
+out/
+npm-debug.log*
+
+# Go build output
+apps/api/mmsu-tennis-api.exe
+apps/api/mmsu-tennis-api
+
+# Editors and operating systems
+.vscode/
+.DS_Store
+Thumbs.db

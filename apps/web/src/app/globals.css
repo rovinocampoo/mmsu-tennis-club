@@ -1,0 +1,94 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap");
+
+:root {
+  color-scheme: light;
+  --green: #123d2b;
+  --lime: #d1ed72;
+  --ink: #183126;
+  --muted: #66756c;
+  --paper: #f7f8f2;
+}
+
+* { box-sizing: border-box; }
+
+html, body { min-height: 100%; margin: 0; }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "DM Sans", sans-serif;
+}
+
+.landing {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  background: radial-gradient(ellipse at 50% 8%, #e7efd7 0, transparent 48%);
+}
+
+.court-mark {
+  width: 66px;
+  height: 82px;
+  margin-bottom: 38px;
+  border: 2px solid var(--green);
+  border-radius: 4px;
+  position: relative;
+  background: linear-gradient(90deg, transparent 49%, var(--green) 49%, var(--green) 51%, transparent 51%);
+}
+
+.court-mark::before, .court-mark::after {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 24%;
+  content: "";
+  border-top: 2px solid var(--green);
+  border-bottom: 2px solid var(--green);
+}
+
+.court-mark::before { top: 0; }
+.court-mark::after { bottom: 0; }
+.court-mark span { position: absolute; top: 50%; left: 0; width: 100%; border-top: 2px solid var(--green); }
+
+.eyebrow {
+  margin: 0 0 16px;
+  color: #51715d;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+h1 {
+  max-width: 760px;
+  margin: 0;
+  color: var(--green);
+  font-family: "Manrope", sans-serif;
+  font-size: clamp(2.8rem, 8vw, 5.7rem);
+  font-weight: 800;
+  letter-spacing: -0.07em;
+  line-height: 1.02;
+}
+
+.intro {
+  max-width: 440px;
+  margin: 24px 0 0;
+  color: var(--muted);
+  font-size: clamp(1rem, 2vw, 1.18rem);
+  line-height: 1.7;
+}
+
+.status {
+  margin: 48px 0 0;
+  padding: 10px 16px;
+  border: 1px solid #dce4d8;
+  border-radius: 999px;
+  background: #fff;
+  color: #58705f;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
