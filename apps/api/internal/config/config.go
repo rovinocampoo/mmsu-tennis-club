@@ -8,7 +8,8 @@ import (
 
 // Config contains settings used to start the API.
 type Config struct {
-	Port string
+	Port        string
+	DatabaseURL string
 }
 
 // Load reads configuration from the process environment.
@@ -23,5 +24,8 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("PORT must be a number from 1 to 65535")
 	}
 
-	return Config{Port: port}, nil
+	return Config{
+		Port:        port,
+		DatabaseURL: os.Getenv("DATABASE_URL"),
+	}, nil
 }

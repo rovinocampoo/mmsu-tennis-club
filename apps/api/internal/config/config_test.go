@@ -2,6 +2,30 @@ package config
 
 import "testing"
 
+func TestLoadReadsDatabaseURL(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://example.invalid/test")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned an unexpected error: %v", err)
+	}
+	if cfg.DatabaseURL != "postgres://example.invalid/test" {
+		t.Errorf("Load().DatabaseURL = %q, want configured value", cfg.DatabaseURL)
+	}
+}
+
+func TestLoadAllowsMissingDatabaseURL(t *testing.T) {
+	t.Setenv("DATABASE_URL", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() without DATABASE_URL returned an unexpected error: %v", err)
+	}
+	if cfg.DatabaseURL != "" {
+		t.Errorf("Load().DatabaseURL = %q, want empty", cfg.DatabaseURL)
+	}
+}
+
 func TestLoadUsesDefaultPort(t *testing.T) {
 	t.Setenv("PORT", "")
 
