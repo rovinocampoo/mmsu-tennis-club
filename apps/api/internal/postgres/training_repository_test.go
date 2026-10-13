@@ -120,6 +120,32 @@ func TestUpcomingQueryFiltersPublicUpcomingSessionsAndCountsConfirmedBookings(t 
 	}
 }
 
+func TestActiveProgramQueryReturnsOnlyActiveCatalogEntries(t *testing.T) {
+	for _, fragment := range []string{
+		"FROM public.training_programs",
+		"WHERE is_active IS TRUE",
+		"ORDER BY name ASC",
+	} {
+		if !strings.Contains(listActiveTrainingPrograms, fragment) {
+			t.Errorf("active program query does not contain %q", fragment)
+		}
+	}
+
+	description := "Beginner instruction"
+	rows := &rowsFixture{rows: [][]any{
+		{"11111111-1111-4111-8111-111111111111", "Beginner Tennis", description},
+		{"22222222-2222-4222-8222-222222222222", "Open Practice", nil},
+	}}
+	repository := NewTrainingRepository(&queryerStub{rows: rows})
+	programs, err := repository.ListActivePrograms(context.Background())
+	if err != nil {
+		t.Fatalf("ListActivePrograms() returned an unexpected error: %v", err)
+	}
+	if !rows.closed || len(programs) != 2 || programs[0].Name != "Beginner Tennis" || programs[0].Description == nil || *programs[0].Description != description || programs[1].Description != nil {
+		t.Fatalf("unexpected active programs: %#v", programs)
+	}
+}
+
 func TestRepositoryPassesUpcomingCutoffAsQueryParameter(t *testing.T) {
 	query := &queryerStub{err: errors.New("database unavailable")}
 	repository := NewTrainingRepository(query)

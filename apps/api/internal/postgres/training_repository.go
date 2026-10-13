@@ -52,6 +52,33 @@ WHERE s.starts_at >= GREATEST($1, pg_catalog.statement_timestamp())
   AND p.is_active IS TRUE
 ORDER BY s.starts_at ASC`
 
+const listActiveTrainingPrograms = `
+SELECT id::text, name, description
+FROM public.training_programs
+WHERE is_active IS TRUE
+ORDER BY name ASC`
+
+func (r *TrainingRepository) ListActivePrograms(ctx context.Context) ([]training.Program, error) {
+	rows, err := r.db.Query(ctx, listActiveTrainingPrograms)
+	if err != nil {
+		return nil, fmt.Errorf("query active training programs: %w", err)
+	}
+	defer rows.Close()
+
+	programs := make([]training.Program, 0)
+	for rows.Next() {
+		var program training.Program
+		if err := rows.Scan(&program.ID, &program.Name, &program.Description); err != nil {
+			return nil, fmt.Errorf("scan active training program: %w", err)
+		}
+		programs = append(programs, program)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate active training programs: %w", err)
+	}
+	return programs, nil
+}
+
 func (r *TrainingRepository) ListUpcoming(ctx context.Context, from time.Time) ([]training.Session, error) {
 	rows, err := r.db.Query(ctx, listUpcomingTrainingSessions, from)
 	if err != nil {

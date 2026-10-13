@@ -17,11 +17,16 @@ import (
 
 type trainingRepositoryStub struct {
 	sessions []training.Session
+	programs []training.Program
 	err      error
 }
 
 func (r trainingRepositoryStub) ListUpcoming(context.Context, time.Time) ([]training.Session, error) {
 	return r.sessions, r.err
+}
+
+func (r trainingRepositoryStub) ListActivePrograms(context.Context) ([]training.Program, error) {
+	return r.programs, r.err
 }
 
 func trainingSessionsRequest(service *training.Service) *httptest.ResponseRecorder {
@@ -136,6 +141,37 @@ func TestTrainingSessionsDoesNotExposeRepositoryError(t *testing.T) {
 	}
 	if strings.Contains(response.Body.String(), databaseError) {
 		t.Errorf("response exposed supplied repository error %q: %s", databaseError, response.Body)
+	}
+}
+
+func TestTrainingProgramsReturnsActiveCatalogFields(t *testing.T) {
+	description := "Introductory tennis instruction"
+	service := training.NewService(trainingRepositoryStub{programs: []training.Program{{
+		ID:          "11111111-1111-4111-8111-111111111111",
+		Name:        "Beginner Tennis",
+		Description: &description,
+	}}})
+	request := httptest.NewRequest(http.MethodGet, "/api/training-programs", nil)
+	response := httptest.NewRecorder()
+	TrainingPrograms(service, log.New(io.Discard, "", 0)).ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", response.Code, http.StatusOK, response.Body)
+	}
+	var programs []map[string]json.RawMessage
+	if err := json.Unmarshal(response.Body.Bytes(), &programs); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	if len(programs) != 1 || strings.Contains(response.Body.String(), "is_active") {
+		t.Fatalf("unexpected public program response: %s", response.Body)
+	}
+}
+
+func TestTrainingProgramsReturnsEmptyArrayWhenNoneExist(t *testing.T) {
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/training-programs", nil)
+	TrainingPrograms(training.NewService(trainingRepositoryStub{}), log.New(io.Discard, "", 0)).ServeHTTP(response, request)
+	if response.Code != http.StatusOK || strings.TrimSpace(response.Body.String()) != "[]" {
+		t.Fatalf("status=%d body=%q", response.Code, response.Body.String())
 	}
 }
 

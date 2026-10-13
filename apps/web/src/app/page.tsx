@@ -9,10 +9,13 @@ export default function Home() {
       <p className="eyebrow">Mariano Marcos State University</p>
       <h1>MMSU Tennis Club</h1>
       <p className="intro">
-        A home for players to learn, practice, and enjoy the game together.
+        Find a published training session, make time to practice, and enjoy the game with the MMSU community.
       </p>
-      <p className="status">Our club website is getting ready.</p>
-      <p className="cta"><Link href="/training">View upcoming training sessions</Link></p>
+      <p className="cta"><Link href="/training">Explore training sessions</Link></p>
+      <nav className="landing-links" aria-label="Club portals">
+        <Link href="/coach">Coach portal</Link>
+        <Link href="/admin">Club admin</Link>
+      </nav>
     </main>
   );
 }

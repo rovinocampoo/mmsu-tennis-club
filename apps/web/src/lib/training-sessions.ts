@@ -12,7 +12,30 @@ export type TrainingSession = {
   is_public: boolean;
 };
 
+export type TrainingProgram = {
+  id: string;
+  name: string;
+  description: string | null;
+};
+
 const DEFAULT_API_BASE_URL = "http://localhost:8080";
+
+export async function getActiveTrainingPrograms(): Promise<TrainingProgram[]> {
+  const baseUrl = (process.env.API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/$/, "");
+  const response = await fetch(`${baseUrl}/api/training-programs`, {
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error("Training program request failed");
+  }
+
+  const programs: unknown = await response.json();
+  if (!Array.isArray(programs)) {
+    throw new Error("Training program response was invalid");
+  }
+  return programs as TrainingProgram[];
+}
 
 export async function getUpcomingTrainingSessions(): Promise<TrainingSession[]> {
   const baseUrl = (process.env.API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/$/, "");

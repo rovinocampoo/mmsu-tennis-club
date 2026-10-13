@@ -1,0 +1,353 @@
+package handlers
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"io"
+	"log"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/rovinocampoo/mmsu-tennis-club/apps/api/internal/notifications"
+	"github.com/rovinocampoo/mmsu-tennis-club/apps/api/internal/training"
+)
+
+type bookingStub struct {
+	request           training.BookingRequest
+	tokenHash         []byte
+	createdID         string
+	err               error
+	status            training.PublicBookingStatus
+	statusErr         error
+	createCalls       int
+	statusCalls       int
+	listCalls         int
+	searchCalls       int
+	approveCalls      int
+	rejectCalls       int
+	adminID           string
+	playerID          *string
+	createNew         bool
+	approvalCommitted bool
+}
+
+func (s *bookingStub) CreateRequest(_ context.Context, request training.BookingRequest, tokenHash []byte) (string, error) {
+	s.createCalls++
+	s.request = request
+	s.tokenHash = append([]byte(nil), tokenHash...)
+	return s.createdID, s.err
+}
+func (s *bookingStub) GetPublicStatus(_ context.Context, tokenHash []byte) (training.PublicBookingStatus, error) {
+	s.statusCalls++
+	s.tokenHash = append([]byte(nil), tokenHash...)
+	return s.status, s.statusErr
+}
+func (s *bookingStub) ListPendingRequests(context.Context) ([]training.BookingRequestRecord, error) {
+	s.listCalls++
+	return nil, s.err
+}
+func (s *bookingStub) SearchPlayers(context.Context, string) ([]training.PlayerCandidate, error) {
+	s.searchCalls++
+	return nil, s.err
+}
+func (s *bookingStub) ApproveRequest(_ context.Context, _, adminID string, playerID *string, createNew bool) (string, error) {
+	s.approveCalls++
+	s.adminID, s.playerID, s.createNew = adminID, playerID, createNew
+	s.approvalCommitted = s.err == nil
+	return "booking-ref", s.err
+}
+func (s *bookingStub) RejectRequest(_ context.Context, _, adminID string) error {
+	s.rejectCalls++
+	s.adminID = adminID
+	return s.err
+}
+func (s *bookingStub) SubmitCoachAvailability(context.Context, string, string, time.Time, time.Time, string) (string, error) {
+	return "avail-id", s.err
+}
+func (s *bookingStub) ListCoachAvailability(context.Context, string) ([]training.CoachAvailability, error) {
+	return nil, s.err
+}
+func (s *bookingStub) DeleteCoachAvailability(context.Context, string, string) error {
+	return s.err
+}
+func (s *bookingStub) ListAllCoachAvailability(context.Context) ([]training.CoachAvailability, error) {
+	return nil, s.err
+}
+func (s *bookingStub) ListAdminTrainingPrograms(context.Context) ([]training.TrainingProgram, error) {
+	return nil, s.err
+}
+func (s *bookingStub) ListAdminTrainingSessions(context.Context) ([]training.AdminSessionRecord, error) {
+	return nil, s.err
+}
+func (s *bookingStub) ListAssignedTrainingSessions(context.Context, string) ([]training.AssignedTrainingSession, error) {
+	return nil, s.err
+}
+func (s *bookingStub) AssignTrainingSessionCoach(context.Context, string, *string) error {
+	return s.err
+}
+func (s *bookingStub) CreateTrainingSession(context.Context, string, time.Time, time.Time, string, *int, string, bool) (string, error) {
+	return "session-id", s.err
+}
+func (s *bookingStub) UpdateTrainingSession(context.Context, string, *string, *string, *bool) error {
+	return s.err
+}
+
+type notifierStub struct {
+	result         notifications.Result
+	calls          int
+	requestID      string
+	approvedAtCall bool
+	repo           *bookingStub
+}
+
+func (s *notifierStub) NotifyApproved(_ context.Context, requestID string) notifications.Result {
+	s.calls++
+	s.requestID = requestID
+	s.approvedAtCall = s.repo == nil || s.repo.approvalCommitted
+	return s.result
+}
+
+func TestBookingRequestCreatesPendingReferenceWithoutConfirming(t *testing.T) {
+	repo := &bookingStub{createdID: "MMSU-1234567890ABCDEF"}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/booking-requests", strings.NewReader(`{"session_id":"11111111-1111-4111-8111-111111111111","full_name":"Alex Player","email":"alex@example.com"}`))
+	BookingRequest(repo, log.New(io.Discard, "", 0))(w, r)
+	var response bookingRequestAccepted
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	rawToken, err := base64.RawURLEncoding.DecodeString(response.TrackingToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := sha256.Sum256(rawToken)
+	if w.Code != http.StatusAccepted || response.Status != "pending" || !strings.Contains(w.Body.String(), "not a confirmed reservation") || response.RequestReference != repo.createdID {
+		t.Fatalf("response = %d %s", w.Code, w.Body)
+	}
+	if len(repo.tokenHash) != sha256.Size || string(repo.tokenHash) != string(hash[:]) {
+		t.Fatalf("stored token hash length=%d does not match generated token", len(repo.tokenHash))
+	}
+	if repo.createCalls != 1 || repo.request.Email != "alex@example.com" || repo.request.SessionID != "11111111-1111-4111-8111-111111111111" {
+		t.Fatalf("request=%#v calls=%d", repo.request, repo.createCalls)
+	}
+}
+
+func TestBookingRequestAcceptsPhoneAndRejectsInvalidInput(t *testing.T) {
+	repo := &bookingStub{createdID: "request-id"}
+	for _, body := range []string{
+		`{"session_id":"bad","full_name":"Alex","phone":"123"}`,
+		`{"session_id":"11111111-1111-4111-8111-111111111111","full_name":"Alex"}`,
+		`{"session_id":"11111111-1111-4111-8111-111111111111","full_name":"Alex","email":"bad"}`,
+		`{"session_id":"11111111-1111-4111-8111-111111111111","full_name":"Alex","phone":"123","unknown":true}`,
+	} {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/api/booking-requests", strings.NewReader(body))
+		BookingRequest(repo, nil)(w, r)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("body %s status=%d", body, w.Code)
+		}
+	}
+	if repo.createCalls != 0 {
+		t.Fatalf("invalid inputs created %d requests", repo.createCalls)
+	}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/booking-requests", strings.NewReader(`{"session_id":"11111111-1111-4111-8111-111111111111","full_name":"Alex","phone":"+1 555 0100"}`))
+	BookingRequest(repo, nil)(w, r)
+	if w.Code != http.StatusAccepted || repo.request.Phone != "+1 555 0100" {
+		t.Fatalf("phone request response=%d %#v", w.Code, repo.request)
+	}
+}
+
+func TestBookingRequestMapsDuplicateAndIneligibleSession(t *testing.T) {
+	for _, tc := range []struct {
+		code string
+		want int
+	}{{"PZ004", http.StatusConflict}, {"PZ001", http.StatusConflict}, {"P0002", http.StatusConflict}} {
+		repo := &bookingStub{err: &pgconn.PgError{Code: tc.code, Message: "internal"}}
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/api/booking-requests", strings.NewReader(`{"session_id":"11111111-1111-4111-8111-111111111111","full_name":"Alex","email":"alex@example.com"}`))
+		BookingRequest(repo, nil)(w, r)
+		if w.Code != tc.want || strings.Contains(w.Body.String(), "internal") {
+			t.Errorf("code %s response=%d %s", tc.code, w.Code, w.Body)
+		}
+	}
+}
+
+func TestPublicBookingStatusValidTokenReturnsOnlyPublicFields(t *testing.T) {
+	tokenBytes := []byte("12345678901234567890123456789012")
+	token := base64.RawURLEncoding.EncodeToString(tokenBytes)
+	startsAt := time.Date(2026, 10, 14, 8, 0, 0, 0, time.UTC)
+	repo := &bookingStub{status: training.PublicBookingStatus{
+		RequestReference: "MMSU-1234567890ABCDEF",
+		Status:           "approved",
+		ProgramName:      "Junior Training",
+		StartsAt:         startsAt,
+		EndsAt:           startsAt.Add(time.Hour),
+		Location:         "MMSU Courts",
+	}}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/booking-status", strings.NewReader(`{"tracking_token":"`+token+`"}`))
+	PublicBookingStatus(repo, nil)(w, r)
+	if w.Code != http.StatusOK || w.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("status=%d headers=%v body=%s", w.Code, w.Header(), w.Body)
+	}
+	for _, expected := range []string{`"request_reference":"MMSU-1234567890ABCDEF"`, `"status":"approved"`, `"program_name":"Junior Training"`, `"location":"MMSU Courts"`, `"next_steps"`} {
+		if !strings.Contains(w.Body.String(), expected) {
+			t.Errorf("status response missing %q: %s", expected, w.Body)
+		}
+	}
+	for _, forbidden := range []string{"full_name", "email", "phone", "decided_by", "notification", "tracking_token_hash", "request_id"} {
+		if strings.Contains(w.Body.String(), forbidden) {
+			t.Errorf("status response exposed %q: %s", forbidden, w.Body)
+		}
+	}
+	hash := sha256.Sum256(tokenBytes)
+	if repo.statusCalls != 1 || string(repo.tokenHash) != string(hash[:]) {
+		t.Fatalf("status calls=%d hash=%x", repo.statusCalls, repo.tokenHash)
+	}
+}
+
+func TestPublicBookingStatusInvalidExpiredAndCrossRequestInputs(t *testing.T) {
+	validToken := base64.RawURLEncoding.EncodeToString([]byte("12345678901234567890123456789012"))
+	for _, tc := range []struct {
+		name       string
+		body       string
+		repoError  error
+		wantStatus int
+		wantCalls  int
+	}{
+		{name: "invalid token", body: `{"tracking_token":"invalid"}`, wantStatus: http.StatusNotFound},
+		{name: "expired token", body: `{"tracking_token":"` + validToken + `"}`, repoError: training.ErrBookingStatusExpired, wantStatus: http.StatusGone, wantCalls: 1},
+		{name: "cannot select another request", body: `{"tracking_token":"` + validToken + `","request_reference":"MMSU-OTHER"}`, wantStatus: http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &bookingStub{statusErr: tc.repoError}
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodPost, "/api/booking-status", strings.NewReader(tc.body))
+			PublicBookingStatus(repo, nil)(w, r)
+			if w.Code != tc.wantStatus || repo.statusCalls != tc.wantCalls {
+				t.Fatalf("status=%d calls=%d body=%s", w.Code, repo.statusCalls, w.Body)
+			}
+		})
+	}
+}
+
+func TestAdminActionRequiresExplicitPlayerReconciliation(t *testing.T) {
+	for _, body := range []string{`{}`, `{"create_new":false}`, `{"player_id":"11111111-1111-4111-8111-111111111111","create_new":true}`} {
+		repo := &bookingStub{}
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/api/admin/booking-requests/22222222-2222-4222-8222-222222222222/approve", strings.NewReader(body))
+		r.SetPathValue("id", "22222222-2222-4222-8222-222222222222")
+		AdminApproveBookingRequest(repo, nil)(w, r)
+		if w.Code != http.StatusBadRequest || repo.approveCalls != 0 {
+			t.Errorf("body=%s status=%d calls=%d", body, w.Code, repo.approveCalls)
+		}
+	}
+}
+
+func TestApprovalConflictWhenDatabaseReportsFullAndRejectDoesNotBook(t *testing.T) {
+	fullRepo := &bookingStub{err: &pgconn.PgError{Code: "PZ002"}}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/admin/booking-requests/22222222-2222-4222-8222-222222222222/approve", strings.NewReader(`{"create_new":true}`))
+	r.SetPathValue("id", "22222222-2222-4222-8222-222222222222")
+	AdminApproveBookingRequest(fullRepo, nil)(w, r)
+	if w.Code != http.StatusConflict || fullRepo.approveCalls != 1 {
+		t.Fatalf("approve status=%d calls=%d", w.Code, fullRepo.approveCalls)
+	}
+
+	rejectRepo := &bookingStub{}
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodPost, "/api/admin/booking-requests/22222222-2222-4222-8222-222222222222/reject", strings.NewReader(`{}`))
+	r.SetPathValue("id", "22222222-2222-4222-8222-222222222222")
+	AdminRejectBookingRequest(rejectRepo, nil)(w, r)
+	if w.Code != http.StatusOK || rejectRepo.rejectCalls != 1 || rejectRepo.approveCalls != 0 {
+		t.Fatalf("reject status=%d calls=%d", w.Code, rejectRepo.rejectCalls)
+	}
+}
+
+func TestRepeatedDecisionReturnsConflict(t *testing.T) {
+	for _, action := range []struct {
+		name    string
+		handler func(training.BookingRepository, interface{ Printf(string, ...any) }) http.HandlerFunc
+	}{
+		{name: "approve", handler: func(repo training.BookingRepository, logger interface{ Printf(string, ...any) }) http.HandlerFunc {
+			return AdminApproveBookingRequest(repo, logger)
+		}},
+		{name: "reject", handler: AdminRejectBookingRequest},
+	} {
+		t.Run(action.name, func(t *testing.T) {
+			repo := &bookingStub{err: &pgconn.PgError{Code: "PZ003"}}
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"create_new":true}`))
+			r.SetPathValue("id", "22222222-2222-4222-8222-222222222222")
+			action.handler(repo, nil)(w, r)
+			if w.Code != http.StatusConflict {
+				t.Fatalf("status=%d body=%s", w.Code, w.Body)
+			}
+		})
+	}
+}
+
+func TestApprovalNotificationRunsAfterCommittedApprovalAndFailureDoesNotUndoIt(t *testing.T) {
+	repo := &bookingStub{}
+	notifier := &notifierStub{repo: repo, result: notifications.Result{Status: notifications.StatusFailed, Message: "Please contact the requester manually.", Retryable: true}}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/admin/booking-requests/22222222-2222-4222-8222-222222222222/approve", strings.NewReader(`{"create_new":true}`))
+	r.SetPathValue("id", "22222222-2222-4222-8222-222222222222")
+	AdminApproveBookingRequest(repo, nil, notifier)(w, r)
+	if w.Code != http.StatusOK || repo.approveCalls != 1 || notifier.calls != 1 || !notifier.approvedAtCall {
+		t.Fatalf("status=%d approval calls=%d notification calls=%d after commit=%t body=%s", w.Code, repo.approveCalls, notifier.calls, notifier.approvedAtCall, w.Body)
+	}
+	for _, expected := range []string{`"status":"approved"`, `"notification_status":"failed"`, `"notification_retryable":true`} {
+		if !strings.Contains(w.Body.String(), expected) {
+			t.Errorf("response %s missing %q", w.Body, expected)
+		}
+	}
+	if strings.Contains(w.Body.String(), "booking_id") {
+		t.Fatal("approval response exposed an unnecessary internal booking ID")
+	}
+}
+
+func TestRejectedFullStaleOrAlreadyDecidedApprovalDoesNotNotify(t *testing.T) {
+	for _, code := range []string{"PZ002", "PZ001", "PZ003", "PZ006"} {
+		t.Run(code, func(t *testing.T) {
+			repo := &bookingStub{err: &pgconn.PgError{Code: code}}
+			notifier := &notifierStub{repo: repo}
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodPost, "/api/admin/booking-requests/22222222-2222-4222-8222-222222222222/approve", strings.NewReader(`{"create_new":true}`))
+			r.SetPathValue("id", "22222222-2222-4222-8222-222222222222")
+			AdminApproveBookingRequest(repo, nil, notifier)(w, r)
+			if notifier.calls != 0 || w.Code == http.StatusOK {
+				t.Fatalf("status=%d notification calls=%d body=%s", w.Code, notifier.calls, w.Body)
+			}
+		})
+	}
+}
+
+func TestRetryNotificationUsesOnlyApprovedRequestReference(t *testing.T) {
+	notifier := &notifierStub{result: notifications.Result{Status: notifications.StatusSent, Message: "accepted by provider"}}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/admin/booking-requests/22222222-2222-4222-8222-222222222222/notification/retry", nil)
+	r.SetPathValue("id", "22222222-2222-4222-8222-222222222222")
+	AdminRetryBookingApprovalNotification(notifier, nil)(w, r)
+	if w.Code != http.StatusOK || notifier.calls != 1 || notifier.requestID != "22222222-2222-4222-8222-222222222222" {
+		t.Fatalf("status=%d calls=%d id=%s body=%s", w.Code, notifier.calls, notifier.requestID, w.Body)
+	}
+}
+
+func TestBookingRequestDoesNotLeakDatabaseErrors(t *testing.T) {
+	repo := &bookingStub{err: errors.New("password=secret")}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/booking-requests", strings.NewReader(`{"session_id":"11111111-1111-4111-8111-111111111111","full_name":"Alex","email":"alex@example.com"}`))
+	BookingRequest(repo, log.New(io.Discard, "", 0))(w, r)
+	if w.Code != http.StatusInternalServerError || strings.Contains(w.Body.String(), "secret") {
+		t.Fatalf("response=%d %s", w.Code, w.Body)
+	}
+}

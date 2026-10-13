@@ -1,6 +1,6 @@
 # MMSU Tennis Club
 
-A starter monorepo for the MMSU Tennis Club web application. The first version is intentionally small: a Go API health endpoint and a Next.js landing page. Training and booking features will be added in later tasks.
+A monorepo for the MMSU Tennis Club web application, with a Go API, public training schedules and manual booking approval, plus coach availability and admin schedule management.
 
 ## Repository structure
 
@@ -13,10 +13,10 @@ supabase/
 docs/                  Project notes
 ```
 
-## What the starter apps do
+## What the apps do
 
-- **Go API (`apps/api`)** runs an HTTP server with `GET /health` and `GET /api/training-sessions`. The schedule endpoint reads upcoming public sessions directly from Supabase PostgreSQL using `pgx` and `DATABASE_URL`.
-- **Next.js app (`apps/web`)** serves a simple MMSU Tennis Club landing page. It does not call the API yet.
+- **Go API (`apps/api`)** serves health, public training schedules, booking requests, coach availability, and protected admin scheduling/review endpoints.
+- **Next.js app (`apps/web`)** serves the customer training schedule in calendar and chronological list views, the coach availability portal at `/coach`, and admin booking/schedule management at `/admin`.
 - **Supabase** provides managed PostgreSQL as the application's source of truth. Schema changes are versioned as SQL migration files under `supabase/migrations/` and applied in order.
 - **Cal.com** may later provide the scheduling/booking interface. The application will retain its own important booking records in PostgreSQL; Cal.com is not configured in this starter.
 
@@ -31,16 +31,18 @@ In PowerShell, from the repository root:
 
 ```powershell
 cd apps/api
+$env:API_HOST = "127.0.0.1"
+$env:PORT = "8081"
 go run ./cmd/api
 ```
 
-The API listens on `http://localhost:8080` by default. Check it in a browser or another terminal:
+The API listens on `http://localhost:8080` by default. `API_HOST` is optional; when unset, the server keeps its existing all-interface bind behavior. For local testing, set it to `127.0.0.1` as shown above. Check the local API in a browser or another terminal:
 
 ```powershell
-Invoke-RestMethod http://localhost:8080/health
+Invoke-RestMethod http://127.0.0.1:8081/health
 ```
 
-To choose a different port, set `PORT` before starting the API, for example `$env:PORT = "9000"`.
+To choose a different port, set `PORT` before starting the API, for example `$env:PORT = "9000"`. `API_HOST` accepts a host name or IP address; the server combines it with `PORT` using Go's address formatting, including IPv6 hosts.
 
 ## Run the Next.js app
 
@@ -56,7 +58,7 @@ Open `http://localhost:3000` in your browser. `npm install` downloads the depend
 
 ## Environment variables and secrets
 
-Copy `apps/api/.env.example` to `apps/api/.env` and `apps/web/.env.example` to `apps/web/.env.local` when you need local settings. The API reads `PORT` and `DATABASE_URL` directly from the process environment; the example files are not automatically loaded. The web example documents the future API URL; the landing page does not use it yet.
+Copy `apps/api/.env.example` to `apps/api/.env` and `apps/web/.env.example` to `apps/web/.env.local` when you need local settings. The API reads its configuration directly from the process environment; the example files are not automatically loaded. The web server uses `API_BASE_URL` for its Go API proxy, and sign-in pages use the public Supabase URL and publishable key.
 
 Never put real passwords, API keys, or database credentials in source code or commit them to Git. Local environment files are ignored by `.gitignore`. Only values deliberately prefixed with `NEXT_PUBLIC_` are suitable for browser-visible configuration; never put secrets in them.
 
@@ -64,10 +66,30 @@ Never put real passwords, API keys, or database credentials in source code or co
 
 The public schedule API uses the dedicated `mmsu_schedule_reader` group role so database access is limited to the columns and rows required by the schedule query. The follow-up migration creates this role as `NOLOGIN`; it does not create a user or password.
 
-Do not use the Supabase `postgres` owner credentials as the permanent application credential. The owner can bypass RLS and has broad schema privileges. After the role migration has been reviewed and applied, create a separate restricted login role and grant it membership only in `mmsu_schedule_reader` (with membership inheritance enabled) so it inherits the reader permissions. Do not grant it membership in `postgres`, `service_role`, or another privileged role. The separate login also needs database `CONNECT`; this migration intentionally grants no database-level privileges. Configure that login's password securely outside Git and set `DATABASE_URL` to the direct PostgreSQL connection details from the Supabase Dashboard. Do not put a real connection string or password in source control or frontend configuration.
+Do not use the Supabase `postgres` owner credentials as an application credential. The owner can bypass RLS and has broad schema privileges. After the role migrations have been reviewed and applied, provision one restricted login for `DATABASE_URL` with membership only in `mmsu_schedule_reader` and `mmsu_booking_api`, and a separate restricted login for `ADMIN_DATABASE_URL` with membership only in `mmsu_booking_admin_api`. Enable membership inheritance and grant each login database `CONNECT`; the migrations intentionally grant no database-level privileges. Never grant an application login membership in either function-owner role, `postgres`, `service_role`, or another privileged role. Configure passwords outside Git and keep both connection strings server-side. Do not put a real connection string in source control or frontend configuration.
 
-The schedule role has no booking write privileges. Any future booking-write path requires a separate security review and permission design.
+The schedule role has no booking write privileges. The public booking API role can submit requests and coach availability and read sessions assigned to the authenticated coach through the protected API. The separate admin API role can call review and actual-session scheduling and coach-assignment functions. Public booking functions execute as the dedicated non-login `mmsu_booking_function_owner`; admin session-management and coach-scoped session-read functions execute as `mmsu_schedule_admin_function_owner`. Neither function-owner role may be granted to either application login.
+
+### Coach availability and published training sessions
+
+Coaches sign in at `/coach` using provisioned Supabase Auth accounts. Each API request is verified with Supabase Auth and must match a server-configured UUID in `COACH_USER_IDS`; an authenticated account that is not on the coach allowlist cannot view or change availability. Admins use the separate `ADMIN_USER_IDS` allowlist and `ADMIN_DATABASE_URL`.
+
+Coach availability is stored separately from `training_sessions`. Submitting an available time never creates or publishes a session. Admins review availability in the Schedule management view, then create actual sessions with a program, date/time, venue, capacity, and publication setting. Admins can assign a coach who has submitted availability, close/reopen registration, cancel sessions, change publication, and maintain notes. Coaches see only sessions assigned to their authenticated account. Customers only see public sessions; the training page lists active `training_programs` alongside published sessions and does not let customers choose a coach or venue. The current program model has no package tiers or prices.
+
+### Manual booking approval
+
+Public submissions to `POST /api/booking-requests` create a `pending` request and return a public reference plus a one-time private status token. The browser keeps the token in the `/booking-status` URL fragment and submits it in the body of `POST /api/booking-status`; fragments are not sent as normal URL paths or query parameters. The database stores only its SHA-256 hash, and the token expires after 30 days. Status responses contain only the request reference, decision state, training program, session time, location, and next steps. A pending request is not a reservation and does not use session capacity. Admins sign in at `/admin` with an owner-provisioned Supabase Auth email/password account. There is no public admin registration. Every admin API call is independently verified by the Go API through the Supabase Auth `/auth/v1/user` endpoint, then checked against the server-only `ADMIN_USER_IDS` UUID allowlist. Configure `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or legacy `SUPABASE_ANON_KEY`) on the API; never use a service-role key. Configure the browser with the public `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` values.
+
+An admin matches a request to an existing player through the protected player search or explicitly creates a player from the submitted details. The system never matches a public request to an existing player based on unverified contact information. Approval locks and rechecks the session, counts confirmed bookings, inserts the confirmed booking, and records the admin UUID and timestamp atomically. If capacity has filled or the session is no longer eligible, approval fails and the request remains pending for an explicit decision. Configure `ADMIN_DATABASE_URL` with its separate restricted login before enabling review.
+
+Approved-request email notifications are supplemental to personal admin follow-up. The API creates an immutable notification snapshot in the same transaction as approval, then sends it after approval commits. Configure the backend-only `RESEND_API_KEY` and `RESEND_FROM_EMAIL` to enable email; both are optional, and approvals still succeed without them. Verify the sender address or its domain in the Resend dashboard before sending. A Resend acceptance response is not proof of delivery, so admins must continue direct follow-up. Failed or unconfigured sends can be retried only through the authenticated admin API, using the same stable Resend idempotency key. Do not put either setting in frontend environment variables or expose them to the browser.
+
+For local admin password recovery, run the web app at `http://localhost:3001`, configure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (or the legacy anon key) in the ignored `apps/web/.env.local`, and add `http://localhost:3001/admin/update-password` to the Supabase project's Auth **URL Configuration → Redirect URLs** allowlist. The recovery email redirects to that exact URL. This is a redirect allowlist setting only; admin authorization remains enforced by the Go API's server-side `ADMIN_USER_IDS` allowlist.
+
+The public booking-request endpoint allows 5 requests per client IP per hour, and private booking-status lookups allow 30 per client IP per minute. Limits are stored in bounded, in-process memory and therefore apply independently on each API instance; they reset when an instance restarts and are not a substitute for shared abuse controls. For Vercel-to-Go API requests, configure the same random secret of at least 32 characters as server-only `API_PROXY_SHARED_SECRET` in both the Next.js deployment and Go API deployment. The Next.js proxy reads the platform-provided `x-vercel-forwarded-for` client IP and sends it to the Go API with that secret; the Go API accepts that IP only when the secret validates. Production booking proxy requests fail with 503 if either setting or the platform IP is missing or invalid. Direct Go API requests without a valid proxy secret are keyed by their connection `RemoteAddr`. Never expose the secret via a `NEXT_PUBLIC_` variable. Limits remain per API process, so keep HTTPS enabled and use gateway/shared abuse controls for multi-instance protection.
+
+The Go server allows 5 seconds to receive request headers and 15 seconds to receive the complete request. Booking operations use a 5-second context deadline; Supabase Auth token validation uses a 2-second timeout and fails closed if Auth is unavailable.
 
 ## Future database changes
 
-When database work begins, add each schema change as a new, ordered SQL migration file under `supabase/migrations/`. Do not edit an already-applied migration to change a deployed schema; create a later migration instead. This makes the database history reviewable alongside the application code.
+Add each schema change as a new, ordered SQL migration file under `supabase/migrations/`. Do not edit an already-applied migration to change a deployed schema; create a later migration instead. This makes the database history reviewable alongside the application code.

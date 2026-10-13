@@ -45,6 +45,28 @@ func TrainingSessions(service *training.Service, logger *log.Logger) http.Handle
 	}
 }
 
+func TrainingPrograms(service *training.Service, logger *log.Logger) http.HandlerFunc {
+	if logger == nil {
+		logger = log.Default()
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		programs, err := service.ListActivePrograms(ctx)
+		if err != nil {
+			logger.Printf("training programs unavailable; check DATABASE_URL, PostgreSQL connectivity, and RLS read privileges (error type %T)", err)
+			writeTrainingSessionsError(w, http.StatusServiceUnavailable, "training programs are temporarily unavailable")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(programs); err != nil {
+			logger.Printf("encode training programs response: %v", err)
+		}
+	}
+}
+
 func writeTrainingSessionsError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
