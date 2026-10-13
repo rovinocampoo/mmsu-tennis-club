@@ -799,3 +799,210 @@ button.calendar-day.outside-month { background: #f6f8f5; }
     font-size: .58rem;
   }
 }
+
+/* Recurring-session planning and duplicate-session workflow */
+.creation-mode-switch {
+  margin: 0 0 18px;
+  flex-wrap: wrap;
+}
+.recurrence-form {
+  display: grid;
+  gap: 18px;
+  margin-top: 8px;
+}
+.recurrence-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.recurrence-form label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: #41584a;
+  font-size: .76rem;
+  font-weight: 700;
+}
+.recurrence-form input:not([type="checkbox"]),
+.recurrence-form select {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 10px;
+  border: 1px solid #d5dfd4;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  font: 500 .85rem "DM Sans", sans-serif;
+}
+.recurrence-form input[type="checkbox"] {
+  width: 17px;
+  min-width: 17px;
+  min-height: 17px;
+  accent-color: var(--green);
+}
+.recurrence-coach,
+.recurrence-notes {
+  grid-column: span 1;
+}
+.weekday-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcf9;
+}
+.weekday-picker legend {
+  padding: 0 6px;
+  color: var(--green);
+  font-size: .78rem;
+  font-weight: 800;
+}
+.recurrence-form .weekday-choice {
+  display: inline-flex;
+  min-width: 67px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 10px;
+  border: 1px solid #dbe5d7;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+.recurrence-publish {
+  width: fit-content;
+  grid-column: auto;
+  margin: 0;
+}
+.recurrence-safety-note {
+  margin: -9px 0 0;
+  color: #647469;
+  font-size: .76rem;
+  line-height: 1.55;
+}
+.recurrence-validation {
+  margin: 0;
+  color: #923d32;
+  font-size: .8rem;
+  font-weight: 700;
+}
+.recurrence-preview {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fbfcf9;
+}
+.recurrence-preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.recurrence-preview-heading .section-kicker {
+  margin-bottom: 5px;
+}
+.recurrence-preview-heading h3 {
+  margin: 0;
+  color: var(--green);
+  font: 750 1rem Manrope, sans-serif;
+}
+.recurrence-preview-heading > span {
+  color: var(--muted);
+  font-size: .74rem;
+  font-weight: 700;
+  text-align: right;
+}
+.recurrence-preview-list {
+  display: grid;
+  max-height: 380px;
+  gap: 7px;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+.recurrence-form .recurrence-preview-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px 10px;
+  padding: 11px 12px;
+  border: 1px solid #e0e7dc;
+  border-radius: 7px;
+  background: #fff;
+  cursor: pointer;
+}
+.recurrence-preview-row > input {
+  grid-row: 1 / span 3;
+  cursor: pointer;
+}
+.recurrence-date-label {
+  color: #2c4735;
+  font-size: .8rem;
+  font-weight: 750;
+}
+.recurrence-time-label {
+  color: #5d7163;
+  font-size: .76rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.recurrence-conflict-list,
+.recurrence-conflict-flag,
+.recurrence-skip-flag {
+  grid-column: 2 / -1;
+  overflow-wrap: anywhere;
+  font-size: .72rem;
+  line-height: 1.45;
+}
+.recurrence-conflict-list { color: #8a493a; }
+.recurrence-conflict-flag { color: #923d32; font-weight: 800; }
+.recurrence-skip-flag { color: #69756c; font-weight: 700; }
+.recurrence-form .recurrence-preview-row.has-conflict:not(.is-excluded) {
+  border-color: #e4b6aa;
+  background: #fff8f6;
+}
+.recurrence-form .recurrence-preview-row.is-excluded {
+  background: #f1f3ef;
+}
+.recurrence-form .recurrence-preview-row.is-excluded .recurrence-date-label,
+.recurrence-form .recurrence-preview-row.is-excluded .recurrence-time-label {
+  color: #78837a;
+  text-decoration: line-through;
+}
+.recurrence-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.recurrence-actions .admin-help {
+  flex: 1 1 260px;
+}
+
+@media (max-width: 760px) {
+  .recurrence-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .recurrence-form .recurrence-preview-row { grid-template-columns: 20px minmax(0, 1fr); }
+  .recurrence-time-label { grid-column: 2; }
+  .recurrence-preview-heading { align-items: flex-start; }
+}
+@media (max-width: 480px) {
+  .recurrence-grid { grid-template-columns: minmax(0, 1fr); }
+  .recurrence-preview { padding: 11px; }
+  .recurrence-form .recurrence-preview-row { padding: 10px; }
+  .weekday-picker { gap: 6px; padding: 10px; }
+  .recurrence-form .weekday-choice { min-width: 60px; }
+  .recurrence-actions > .admin-button { width: 100%; }
+}
+.recurrence-refresh {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: .7rem;
+}
+@media (max-width: 760px) {
+  .recurrence-preview-heading { flex-wrap: wrap; }
+  .recurrence-preview-heading .recurrence-refresh { flex: 1 1 100%; }
+}
