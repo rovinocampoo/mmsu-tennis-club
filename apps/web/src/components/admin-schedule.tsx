@@ -157,7 +157,7 @@ export default function AdminSchedule({
     adminDateKey(new Date()),
   );
 
-  const [scheduleView, setScheduleView] = useState<"list" | "calendar">("list");
+  const [scheduleView, setScheduleView] = useState<"list" | "calendar">("calendar");
 
   // Past training sessions are hidden until an admin asks to see them.
   const [showPastSessions, setShowPastSessions] = useState(false);

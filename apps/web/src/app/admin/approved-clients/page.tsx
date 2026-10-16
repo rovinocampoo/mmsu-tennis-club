@@ -75,9 +75,7 @@ function todayManilaDateKey() {
 function calendarDates(year: number, month: number): CalendarDate[] {
   const firstDay = new Date(Date.UTC(year, month - 1, 1));
 
-  firstDay.setUTCDate(
-    firstDay.getUTCDate() - ((firstDay.getUTCDay() + 6) % 7),
-  );
+  firstDay.setUTCDate(firstDay.getUTCDate() - ((firstDay.getUTCDay() + 6) % 7));
 
   return Array.from({ length: 42 }, (_, index) => {
     const date = new Date(firstDay);
@@ -88,9 +86,7 @@ function calendarDates(year: number, month: number): CalendarDate[] {
     return {
       key,
       day: date.getUTCDate(),
-      inMonth:
-        key.slice(0, 7) ===
-        `${year}-${String(month).padStart(2, "0")}`,
+      inMonth: key.slice(0, 7) === `${year}-${String(month).padStart(2, "0")}`,
     };
   });
 }
@@ -204,7 +200,7 @@ export default function ApprovedClientsPage() {
   const [coachFilter, setCoachFilter] = useState("");
 
   const [showPastBookings, setShowPastBookings] = useState(false);
-  const [view, setView] = useState<ScheduleView>("list");
+  const [view, setView] = useState<ScheduleView>("calendar");
 
   const [selectedDate, setSelectedDate] = useState(todayManilaDateKey);
   const [calendarMonth, setCalendarMonth] = useState(() => {
@@ -458,8 +454,7 @@ export default function ApprovedClientsPage() {
 
   const selectedDateRecords = recordsByDate.get(selectedDate) ?? [];
 
-  const hasResultsToDisplay =
-    loadStatus === "ready" || records.length > 0;
+  const hasResultsToDisplay = loadStatus === "ready" || records.length > 0;
 
   function resetFilters() {
     setSearch("");
@@ -627,9 +622,7 @@ export default function ApprovedClientsPage() {
                   aria-label="Filtered booking totals"
                 >
                   <div className={`approved-stat ${styles.stat}`}>
-                    <span className={styles.statLabel}>
-                      Confirmed bookings
-                    </span>
+                    <span className={styles.statLabel}>Confirmed bookings</span>
                     <strong className={styles.statValue}>
                       {filteredRecords.length}
                     </strong>
@@ -995,8 +988,7 @@ export default function ApprovedClientsPage() {
                           <div className="admin-state">
                             {records.length === 0
                               ? "No confirmed bookings have been recorded yet."
-                              : visibleRecords.length === 0 &&
-                                  !showPastBookings
+                              : visibleRecords.length === 0 && !showPastBookings
                                 ? "There are no current or upcoming bookings. Enable Show past bookings to view historical records."
                                 : filteredRecords.length === 0
                                   ? "No bookings match your current filters."

@@ -146,7 +146,7 @@ export default function TrainingSchedule({
   sessionsUnavailable: boolean;
   initialMonth: string;
 }) {
-  const [view, setView] = useState<ScheduleView>("list");
+  const [view, setView] = useState<ScheduleView>("calendar");
   const [primaryTab, setPrimaryTab] = useState<PrimaryTab>("sessions");
   const [month, setMonth] = useState(() => {
     const [year, monthNumber] = initialMonth.split("-").map(Number);
