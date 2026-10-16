@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArrowDown, ArrowUpRight } from "lucide-react";
 
 export default function Home() {
   return (
@@ -22,7 +23,10 @@ export default function Home() {
           <Link href="#club">The club</Link>
           <Link href="#how-it-works">How it works</Link>
           <Link className="home-nav-cta" href="/training">
-            Training schedule <span aria-hidden="true">↗</span>
+            Training schedule
+            <span aria-hidden="true">
+              <ArrowUpRight size={16} strokeWidth={2} />
+            </span>
           </Link>
         </nav>
       </header>
@@ -50,12 +54,16 @@ export default function Home() {
           <div className="home-hero-actions">
             <Link className="home-primary-cta" href="/training">
               Explore training
-              <span aria-hidden="true">↗</span>
+              <span aria-hidden="true">
+                <ArrowUpRight size={17} strokeWidth={2.25} />
+              </span>
             </Link>
 
             <a className="home-secondary-cta" href="#club">
               Discover the club
-              <span aria-hidden="true">↓</span>
+              <span aria-hidden="true">
+                <ArrowDown size={15} strokeWidth={2.25} />
+              </span>
             </a>
           </div>
         </div>
@@ -104,7 +112,10 @@ export default function Home() {
             </p>
 
             <Link className="home-text-link" href="/training">
-              Find a training session <span aria-hidden="true">↗</span>
+              Find a training session
+              <span aria-hidden="true">
+                <ArrowUpRight size={16} strokeWidth={2} />
+              </span>
             </Link>
           </div>
         </div>
@@ -182,8 +193,8 @@ export default function Home() {
               <h3>Find your session</h3>
               <p>Browse the schedule for available training sessions.</p>
             </div>
-            <span className="home-step-arrow" aria-hidden="true">
-              ↗
+            <span aria-hidden="true">
+              <ArrowUpRight size={17} strokeWidth={1.8} />
             </span>
           </article>
 
@@ -193,8 +204,8 @@ export default function Home() {
               <h3>Send a request</h3>
               <p>Choose a session and submit your contact details.</p>
             </div>
-            <span className="home-step-arrow" aria-hidden="true">
-              ↗
+            <span aria-hidden="true">
+              <ArrowUpRight size={17} strokeWidth={1.8} />
             </span>
           </article>
 
@@ -204,15 +215,17 @@ export default function Home() {
               <h3>Wait for confirmation</h3>
               <p>Your request is reviewed before your spot is confirmed.</p>
             </div>
-            <span className="home-step-arrow" aria-hidden="true">
-              ↗
+            <span aria-hidden="true">
+              <ArrowUpRight size={17} strokeWidth={1.8} />
             </span>
           </article>
         </div>
 
         <Link className="home-primary-cta" href="/training">
           View training schedule
-          <span aria-hidden="true">↗</span>
+          <span aria-hidden="true">
+            <ArrowUpRight size={17} strokeWidth={2.25} />
+          </span>
         </Link>
       </section>
 
@@ -238,7 +251,9 @@ export default function Home() {
 
         <Link className="home-primary-cta" href="/training">
           Explore training sessions
-          <span aria-hidden="true">↗</span>
+          <span aria-hidden="true">
+            <ArrowUpRight size={17} strokeWidth={2.25} />
+          </span>
         </Link>
       </section>
 
