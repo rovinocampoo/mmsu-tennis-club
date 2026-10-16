@@ -388,7 +388,18 @@ export default function TrainingSchedule({
                     aria-selected={selectedDay === day.key}
                     aria-label={`${day.key}${daySessions.length ? `, ${daySessions.length} sessions` : ""}`}
                     key={day.key}
-                    onClick={() => setSelectedDay(day.key)}
+                    onClick={() => {
+                      setSelectedDay(day.key);
+
+                      window.requestAnimationFrame(() => {
+                        document
+                          .getElementById("selected-date-agenda")
+                          ?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "start",
+                          });
+                      });
+                    }}
                   >
                     <span className="calendar-day-number">{day.day}</span>
                     {daySessions.length > 0 && (
@@ -409,7 +420,11 @@ export default function TrainingSchedule({
                 );
               })}
             </div>
-            <div className="calendar-day-agenda">
+            <div
+              className="calendar-day-agenda"
+              id="selected-date-agenda"
+              style={{ scrollMarginTop: "24px" }}
+            >
               <div className="agenda-heading">
                 <div>
                   <p className="section-kicker">SELECTED DATE</p>

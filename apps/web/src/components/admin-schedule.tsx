@@ -157,7 +157,9 @@ export default function AdminSchedule({
     adminDateKey(new Date()),
   );
 
-  const [scheduleView, setScheduleView] = useState<"list" | "calendar">("calendar");
+  const [scheduleView, setScheduleView] = useState<"list" | "calendar">(
+    "calendar",
+  );
 
   // Past training sessions are hidden until an admin asks to see them.
   const [showPastSessions, setShowPastSessions] = useState(false);
@@ -1561,7 +1563,18 @@ export default function AdminSchedule({
                     aria-selected={selectedDate === day.key}
                     aria-label={`${day.key}, ${daySessions.length} sessions, ${dayAvailability.length} coach availability submissions`}
                     key={day.key}
-                    onClick={() => setSelectedDate(day.key)}
+                    onClick={() => {
+                      setSelectedDate(day.key);
+
+                      window.requestAnimationFrame(() => {
+                        document
+                          .getElementById("admin-selected-date-agenda")
+                          ?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "start",
+                          });
+                      });
+                    }}
                   >
                     <span className="calendar-day-number">{day.day}</span>
 
@@ -1605,7 +1618,11 @@ export default function AdminSchedule({
               })}
             </div>
 
-            <div className="admin-day-agenda">
+            <div
+              className="admin-day-agenda"
+              id="admin-selected-date-agenda"
+              style={{ scrollMarginTop: "24px" }}
+            >
               <h3>
                 {selectedDate
                   ? new Intl.DateTimeFormat("en-PH", {
@@ -1616,7 +1633,6 @@ export default function AdminSchedule({
                     }).format(new Date(`${selectedDate}T12:00:00+08:00`))
                   : "Selected date"}
               </h3>
-
               {selectedSessions.length === 0 &&
               selectedAvailability.length === 0 ? (
                 <p className="admin-state">
