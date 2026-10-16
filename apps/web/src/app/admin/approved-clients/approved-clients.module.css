@@ -1,0 +1,620 @@
+.page {
+  min-height: 100vh;
+  padding-bottom: 76px;
+}
+
+.main {
+  width: min(100%, 1200px);
+  max-width: 1200px;
+  padding-top: 42px;
+}
+
+.pageHeading {
+  align-items: flex-end;
+  margin-bottom: 30px;
+}
+
+.pageHeading :global(h1) {
+  margin: 0;
+  font-size: clamp(2.25rem, 5vw, 3.5rem);
+  letter-spacing: -0.065em;
+  line-height: 1.08;
+}
+
+.description {
+  max-width: 680px;
+  margin: 14px 0 0;
+  font-size: 0.94rem;
+  line-height: 1.75;
+}
+
+.headingActions {
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0 0 28px;
+}
+
+.stat {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  padding: 23px 25px;
+  border: 1px solid #e0e7dd;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 5px 20px #173d2906;
+}
+
+.statLabel {
+  display: block;
+  color: #66756c;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.statValue {
+  display: block;
+  margin-top: 8px;
+  color: #123d2b;
+  font-family: Manrope, sans-serif;
+  font-size: clamp(2rem, 4vw, 2.7rem);
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.statFoot {
+  display: block;
+  margin-top: 7px;
+  color: #758078;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.filterCard {
+  width: 100%;
+  max-width: none;
+  margin-bottom: 34px;
+  padding: 25px;
+  border-radius: 8px;
+}
+
+.filterCard :global(.schedule-section-heading) {
+  align-items: center;
+  margin-bottom: 22px;
+}
+
+.filterCard :global(.schedule-section-heading h2) {
+  margin: 0;
+  color: #123d2b;
+  font-family: Manrope, sans-serif;
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+.filterGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 19px 16px;
+}
+
+.filterGrid label {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  color: #385241;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.searchField {
+  grid-column: 1 / -1;
+}
+
+.filterGrid input,
+.filterGrid select {
+  width: 100%;
+  min-width: 0;
+  min-height: 45px;
+  padding: 10px 12px;
+  border: 1px solid #dce5d9;
+  border-radius: 5px;
+  background: #fbfcf9;
+  color: #183126;
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.86rem;
+  font-weight: 400;
+}
+
+.filterGrid input::placeholder {
+  color: #89958c;
+}
+
+.filterGrid input:hover,
+.filterGrid select:hover {
+  border-color: #a9bbaa;
+}
+
+.filterGrid input:focus-visible,
+.filterGrid select:focus-visible {
+  border-color: #648269;
+  outline: 3px solid #d1ed72;
+  outline-offset: 2px;
+}
+
+.filterSummary {
+  margin: 17px 0 0;
+  font-size: 0.78rem;
+}
+
+.resultsSection {
+  min-width: 0;
+}
+
+.resultsHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.resultsHeader h2 {
+  margin: 0;
+  color: #123d2b;
+  font-family: Manrope, sans-serif;
+  font-size: clamp(1.45rem, 3vw, 1.85rem);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1.25;
+}
+
+.resultsDescription {
+  margin: 7px 0 0;
+  color: #66756c;
+  font-size: 0.83rem;
+  line-height: 1.6;
+}
+
+.viewSwitch {
+  flex-shrink: 0;
+}
+
+.bookingList {
+  display: grid;
+  gap: 14px;
+}
+
+.bookingCard {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  padding: 23px 25px;
+  border: 1px solid #e0e7dd;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 5px 20px #173d2906;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.bookingCard:hover {
+  border-color: #cbd8c8;
+  box-shadow: 0 8px 24px #173d290a;
+}
+
+.bookingCardHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.playerIdentity {
+  min-width: 0;
+}
+
+.playerIdentity :global(.section-kicker) {
+  margin-bottom: 7px;
+}
+
+.playerIdentity h3 {
+  margin: 0;
+  color: #123d2b;
+  font-family: Manrope, sans-serif;
+  font-size: 1.12rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.contactDetails {
+  margin: 8px 0 22px;
+  color: #66756c;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.bookingFields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px 24px;
+  padding-top: 20px;
+  border-top: 1px solid #edf0eb;
+}
+
+.bookingFields > div {
+  min-width: 0;
+}
+
+.bookingFields span {
+  display: block;
+  margin-bottom: 7px;
+  color: #758078;
+  font-size: 0.74rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.bookingFields strong {
+  display: block;
+  color: #183126;
+  font-size: 0.86rem;
+  font-weight: 650;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.bookingReference {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.77rem !important;
+  font-weight: 500 !important;
+}
+
+.calendarLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  align-items: start;
+  gap: 24px;
+}
+
+.calendarPanel {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #e0e7dd;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.calendarPanel :global(.calendar-toolbar) {
+  margin-bottom: 18px;
+}
+
+.calendarPanel :global(.calendar-toolbar h3) {
+  font-family: Manrope, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.bookingCalendar {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.bookingCalendar :global(.calendar-weekday) {
+  padding: 10px 2px;
+  font-size: 0.68rem;
+}
+
+.bookingCalendar :global(.calendar-day) {
+  min-width: 0;
+  min-height: 96px;
+  padding: 8px 6px;
+  overflow: hidden;
+}
+
+.bookingCalendar :global(button.calendar-day) {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  width: 100%;
+  color: #314b3a;
+  text-align: left;
+  font-family: "DM Sans", sans-serif;
+}
+
+.bookingCalendar :global(button.calendar-day:hover) {
+  background: #f3f7ed;
+}
+
+.bookingCalendar :global(button.calendar-day:focus-visible) {
+  position: relative;
+  z-index: 1;
+  outline: 3px solid #7d9852;
+  outline-offset: -3px;
+}
+
+.bookingCalendar :global(button.calendar-day.selected) {
+  background: #123d2b;
+  color: #fff;
+}
+
+.bookingCalendar :global(button.calendar-day.selected .calendar-day-number) {
+  color: #fff;
+}
+
+.bookingCalendar :global(button.calendar-day.selected .calendar-day-count) {
+  color: #ecf3e3;
+}
+
+.bookingCalendar :global(button.calendar-day.selected .calendar-day-dots i) {
+  background: #d1ed72;
+}
+
+.bookingCalendar :global(.calendar-day.outside-month) {
+  background: #f8f9f6;
+}
+
+.bookingCalendar :global(.calendar-day.outside-month.selected) {
+  background: #123d2b;
+}
+
+.bookingCalendar :global(.calendar-day-count) {
+  font-size: 0.62rem;
+  font-weight: 650;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.bookingCalendar :global(.calendar-day-dots) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: auto;
+}
+
+.todayCell:not(:global(.selected)) {
+  box-shadow: inset 0 0 0 2px #a5bf65;
+}
+
+.calendarFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.calendarFooter > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #66756c;
+  font-size: 0.76rem;
+}
+
+.calendarFooter > span i {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: #718b61;
+}
+
+.calendarFooter :global(.admin-button) {
+  min-height: 36px;
+  padding: 8px 12px;
+  font-size: 0.78rem;
+}
+
+.dayAgenda {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid #e0e7dd;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.agendaHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.agendaHeader h3 {
+  margin: 0;
+  color: #123d2b;
+  font-family: Manrope, sans-serif;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.4;
+}
+
+.agendaCount {
+  display: grid;
+  place-items: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: #edf4e8;
+  color: #315d3e;
+  font-size: 0.82rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.dayAgenda :global(.admin-state) {
+  margin-top: 0;
+  padding: 20px;
+  font-size: 0.84rem;
+  line-height: 1.65;
+}
+
+.dayAgenda .bookingList {
+  gap: 12px;
+}
+
+.dayAgenda .bookingCard {
+  padding: 17px;
+  box-shadow: none;
+}
+
+.dayAgenda .bookingFields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 1000px) {
+  .calendarLayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dayAgenda .bookingFields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .main {
+    padding-top: 28px;
+  }
+
+  .pageHeading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .headingActions {
+    justify-content: flex-start;
+  }
+
+  .stats {
+    gap: 12px;
+  }
+
+  .stat {
+    padding: 18px;
+  }
+
+  .filterCard {
+    padding: 20px;
+  }
+
+  .filterGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bookingCard {
+    padding: 20px;
+  }
+
+  .bookingFields,
+  .dayAgenda .bookingFields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .bookingCalendar :global(.calendar-day) {
+    min-height: 82px;
+    padding: 6px 4px;
+  }
+
+  .bookingCalendar :global(.calendar-day-count) {
+    font-size: 0.58rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats {
+    grid-template-columns: 1fr;
+  }
+
+  .filterCard {
+    padding: 17px;
+  }
+
+  .filterGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .searchField {
+    grid-column: auto;
+  }
+
+  .resultsHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .bookingCard {
+    padding: 17px;
+  }
+
+  .bookingCardHeading {
+    align-items: flex-start;
+  }
+
+  .bookingFields,
+  .dayAgenda .bookingFields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .calendarPanel {
+    padding: 9px;
+  }
+
+  .bookingCalendar :global(.calendar-weekday) {
+    padding: 8px 1px;
+    font-size: 0.58rem;
+  }
+
+  .bookingCalendar :global(.calendar-day) {
+    min-height: 64px;
+    padding: 4px 3px;
+  }
+
+  .bookingCalendar :global(.calendar-day-count) {
+    font-size: 0.53rem;
+  }
+
+  .bookingCalendar :global(.calendar-day-dots) {
+    gap: 2px;
+  }
+
+  .bookingCalendar :global(.calendar-day-dots i) {
+    width: 4px;
+    height: 4px;
+  }
+
+  .dayAgenda {
+    padding: 17px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bookingCard {
+    transition: none;
+  }
+}

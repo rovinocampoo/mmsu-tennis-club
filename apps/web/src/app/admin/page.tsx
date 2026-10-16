@@ -426,7 +426,12 @@ export default function AdminPage() {
             <small>TENNIS CLUB</small>
           </span>
         </Link>
-        <span className="header-note">Admin review</span>
+        <nav className="portal-nav" aria-label="Club navigation">
+          <Link href="/training">Public schedule</Link>
+          {sessionState.status === "authenticated" && (
+            <Link href="/admin/approved-clients">Approved clients</Link>
+          )}
+        </nav>{" "}
       </header>
       <section className="admin-main">
         {sessionState.status === "checking" ? (
@@ -522,9 +527,15 @@ export default function AdminPage() {
                     : "Review coach availability, then separately create and publish actual training sessions."}
                 </p>
               </div>
-              <button className="admin-button secondary" onClick={signOut}>
-                Sign out
-              </button>
+              <div className="admin-heading-actions">
+                <button
+                  className="admin-button secondary"
+                  type="button"
+                  onClick={signOut}
+                >
+                  Sign out
+                </button>
+              </div>
             </div>
             {verificationRetryCount > 0 && (
               <p className="admin-state" role="status" aria-live="polite">
