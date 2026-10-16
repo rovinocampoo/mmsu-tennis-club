@@ -247,6 +247,48 @@ func (r *BookingRepository) ListAdminTrainingSessions(ctx context.Context) ([]tr
 	return result, nil
 }
 
+func (r *BookingRepository) ListApprovedClients(ctx context.Context) ([]training.ApprovedClientRecord, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT booking_id, player_id, player_name, player_email, player_phone,
+		       session_id, program_name, starts_at, ends_at, location, capacity,
+		       assigned_coach_id, assigned_coach_name, booking_created_at
+		FROM public.admin_list_approved_clients()
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list approved clients: %w", err)
+	}
+	defer rows.Close()
+
+	result := make([]training.ApprovedClientRecord, 0)
+	for rows.Next() {
+		var client training.ApprovedClientRecord
+		if err := rows.Scan(
+			&client.BookingID,
+			&client.PlayerID,
+			&client.PlayerName,
+			&client.PlayerEmail,
+			&client.PlayerPhone,
+			&client.SessionID,
+			&client.ProgramName,
+			&client.StartsAt,
+			&client.EndsAt,
+			&client.Location,
+			&client.Capacity,
+			&client.AssignedCoachID,
+			&client.AssignedCoachName,
+			&client.BookingCreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan approved client: %w", err)
+		}
+		result = append(result, client)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read approved clients: %w", err)
+	}
+
+	return result, nil
+}
+
 func (r *BookingRepository) ListAssignedTrainingSessions(ctx context.Context, coachID string) ([]training.AssignedTrainingSession, error) {
 	rows, err := r.db.Query(ctx, `SELECT id, program_name, program_description, starts_at, ends_at, location, status, is_public FROM public.coach_list_assigned_training_sessions($1::uuid)`, coachID)
 	if err != nil {

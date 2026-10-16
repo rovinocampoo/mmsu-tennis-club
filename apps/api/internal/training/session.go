@@ -109,6 +109,23 @@ type AdminSessionRecord struct {
 	AssignedCoachName     *string   `json:"assigned_coach_name"`
 }
 
+type ApprovedClientRecord struct {
+	BookingID         string    `json:"booking_id"`
+	PlayerID          string    `json:"player_id"`
+	PlayerName        string    `json:"player_name"`
+	PlayerEmail       *string   `json:"player_email"`
+	PlayerPhone       *string   `json:"player_phone"`
+	SessionID         string    `json:"session_id"`
+	ProgramName       string    `json:"program_name"`
+	StartsAt          time.Time `json:"starts_at"`
+	EndsAt            time.Time `json:"ends_at"`
+	Location          string    `json:"location"`
+	Capacity          *int      `json:"capacity"`
+	AssignedCoachID   *string   `json:"assigned_coach_id"`
+	AssignedCoachName *string   `json:"assigned_coach_name"`
+	BookingCreatedAt  time.Time `json:"booking_created_at"`
+}
+
 type AssignedTrainingSession struct {
 	ID                 string    `json:"id"`
 	ProgramName        string    `json:"program_name"`
@@ -134,6 +151,7 @@ type BookingRepository interface {
 	ListAllCoachAvailability(ctx context.Context) ([]CoachAvailability, error)
 	ListAdminTrainingPrograms(ctx context.Context) ([]TrainingProgram, error)
 	ListAdminTrainingSessions(ctx context.Context) ([]AdminSessionRecord, error)
+	ListApprovedClients(ctx context.Context) ([]ApprovedClientRecord, error)
 	ListAssignedTrainingSessions(ctx context.Context, coachID string) ([]AssignedTrainingSession, error)
 	AssignTrainingSessionCoach(ctx context.Context, sessionID string, coachID *string) error
 	CreateTrainingSession(ctx context.Context, programID string, startsAt, endsAt time.Time, location string, capacity *int, notes string, isPublic bool) (string, error)

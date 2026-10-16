@@ -36,6 +36,7 @@ type bookingStub struct {
 	playerID          *string
 	createNew         bool
 	approvalCommitted bool
+	approvedClients   []training.ApprovedClientRecord
 }
 
 func (s *bookingStub) CreateRequest(_ context.Context, request training.BookingRequest, tokenHash []byte) (string, error) {
@@ -85,6 +86,9 @@ func (s *bookingStub) ListAdminTrainingPrograms(context.Context) ([]training.Tra
 }
 func (s *bookingStub) ListAdminTrainingSessions(context.Context) ([]training.AdminSessionRecord, error) {
 	return nil, s.err
+}
+func (s *bookingStub) ListApprovedClients(context.Context) ([]training.ApprovedClientRecord, error) {
+	return s.approvedClients, s.err
 }
 func (s *bookingStub) ListAssignedTrainingSessions(context.Context, string) ([]training.AssignedTrainingSession, error) {
 	return nil, s.err
@@ -349,5 +353,89 @@ func TestBookingRequestDoesNotLeakDatabaseErrors(t *testing.T) {
 	BookingRequest(repo, log.New(io.Discard, "", 0))(w, r)
 	if w.Code != http.StatusInternalServerError || strings.Contains(w.Body.String(), "secret") {
 		t.Fatalf("response=%d %s", w.Code, w.Body)
+	}
+}
+
+func TestAdminApprovedClientsReturnsRecords(t *testing.T) {
+	startsAt := time.Date(2026, 10, 20, 1, 0, 0, 0, time.UTC)
+	email := "alex@example.com"
+	repo := &bookingStub{
+		approvedClients: []training.ApprovedClientRecord{
+			{
+				BookingID:        "booking-1",
+				PlayerID:         "player-1",
+				PlayerName:       "Alex Player",
+				PlayerEmail:      &email,
+				SessionID:        "session-1",
+				ProgramName:      "Junior Training",
+				StartsAt:         startsAt,
+				EndsAt:           startsAt.Add(time.Hour),
+				Location:         "MMSU Courts",
+				BookingCreatedAt: startsAt.Add(-24 * time.Hour),
+			},
+		},
+	}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/admin/approved-clients", nil)
+	AdminApprovedClients(repo, log.New(io.Discard, "", 0))(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body)
+	}
+
+	var response struct {
+		Clients []training.ApprovedClientRecord `json:"clients"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Clients) != 1 {
+		t.Fatalf("clients=%d body=%s", len(response.Clients), w.Body)
+	}
+	if response.Clients[0].PlayerName != "Alex Player" ||
+		response.Clients[0].ProgramName != "Junior Training" ||
+		response.Clients[0].BookingID != "booking-1" {
+		t.Fatalf("unexpected client record: %#v", response.Clients[0])
+	}
+}
+
+func TestAdminApprovedClientsReturnsEmptyArray(t *testing.T) {
+	repo := &bookingStub{}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/admin/approved-clients", nil)
+	AdminApprovedClients(repo, nil)(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body)
+	}
+	if !strings.Contains(w.Body.String(), `"clients":[]`) {
+		t.Fatalf("expected an empty clients array, body=%s", w.Body)
+	}
+}
+
+func TestAdminApprovedClientsHandlesUnavailableRepository(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/admin/approved-clients", nil)
+	AdminApprovedClients(nil, nil)(w, r)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body)
+	}
+}
+
+func TestAdminApprovedClientsHandlesRepositoryError(t *testing.T) {
+	repo := &bookingStub{err: errors.New("database unavailable")}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/admin/approved-clients", nil)
+	AdminApprovedClients(repo, log.New(io.Discard, "", 0))(w, r)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body)
+	}
+	if strings.Contains(w.Body.String(), "database unavailable") {
+		t.Fatalf("internal error leaked to response: %s", w.Body)
 	}
 }

@@ -186,6 +186,75 @@ func TestAdminScheduleOwnerCanMaintainSessionUpdateTimestamp(t *testing.T) {
 	}
 }
 
+func TestAdminApprovedClientsMigrationRestrictsAccess(t *testing.T) {
+	content, err := os.ReadFile("../../../../supabase/migrations/20261015083917_add_admin_approved_clients.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sql := string(content)
+	list := migrationFunction(t, sql, "admin_list_approved_clients")
+
+	for _, expected := range []string{
+		"SECURITY DEFINER",
+		"SET search_path = ''",
+		"b.status = 'confirmed'",
+		"JOIN public.players AS pl ON pl.id = b.player_id",
+		"JOIN public.training_sessions AS s ON s.id = b.session_id",
+		"JOIN public.training_programs AS p ON p.id = s.program_id",
+		"LEFT JOIN public.coach_session_assignments AS a",
+	} {
+		if !strings.Contains(list, expected) {
+			t.Errorf("approved clients function missing %q", expected)
+		}
+	}
+
+	if strings.Contains(list, "b.status = 'pending'") {
+		t.Fatal("approved clients function must not return pending bookings")
+	}
+
+	for _, expected := range []string{
+		"REVOKE ALL ON FUNCTION public.admin_list_approved_clients()",
+		"TO mmsu_booking_admin_api",
+		"GRANT SELECT (id, full_name, email, phone)",
+		"TO mmsu_schedule_admin_function_owner",
+		"CREATE POLICY players_schedule_admin_select",
+		"FOR SELECT",
+		"USING (true)",
+		"OWNER TO mmsu_schedule_admin_function_owner",
+		"GRANT CREATE ON SCHEMA public TO mmsu_schedule_admin_function_owner",
+		"REVOKE CREATE ON SCHEMA public FROM mmsu_schedule_admin_function_owner",
+		"GRANT mmsu_schedule_admin_function_owner TO CURRENT_USER",
+		"REVOKE mmsu_schedule_admin_function_owner FROM CURRENT_USER",
+	} {
+		if !strings.Contains(sql, expected) {
+			t.Errorf("approved clients migration missing %q", expected)
+		}
+	}
+
+	playerGrant := strings.Index(sql, "GRANT SELECT (id, full_name, email, phone)")
+	playerPolicy := strings.Index(sql, "CREATE POLICY players_schedule_admin_select")
+	schemaCreate := strings.Index(sql, "GRANT CREATE ON SCHEMA public TO mmsu_schedule_admin_function_owner")
+	roleGrant := strings.Index(sql, "GRANT mmsu_schedule_admin_function_owner TO CURRENT_USER")
+	ownerChange := strings.Index(sql, "ALTER FUNCTION public.admin_list_approved_clients()")
+	schemaRevoke := strings.Index(sql, "REVOKE CREATE ON SCHEMA public FROM mmsu_schedule_admin_function_owner")
+	roleRevoke := strings.LastIndex(sql, "REVOKE mmsu_schedule_admin_function_owner FROM CURRENT_USER")
+
+	if playerGrant < 0 ||
+		playerPolicy <= playerGrant ||
+		schemaCreate <= playerPolicy ||
+		roleGrant <= schemaCreate ||
+		ownerChange <= roleGrant ||
+		schemaRevoke <= ownerChange ||
+		roleRevoke <= schemaRevoke {
+		t.Fatal("approved clients migration must grant minimal player access, prepare ownership transfer, then revoke temporary privileges in order")
+	}
+
+	if strings.Contains(sql, "GRANT SELECT ON TABLE public.players TO mmsu_booking_admin_api") {
+		t.Fatal("admin API role must not receive direct player-table access")
+	}
+}
+
 func TestCoachSessionAssignmentsAreAdminManagedAndCoachScoped(t *testing.T) {
 	content, err := os.ReadFile("../../../../supabase/migrations/20261012190000_add_coach_session_assignments.sql")
 	if err != nil {

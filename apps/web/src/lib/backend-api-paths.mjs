@@ -2,7 +2,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 
 export function isBackendRouteAllowed(method, path) {
   if (method === "POST" && path.length === 1 && ["booking-requests", "booking-status"].includes(path[0])) return true;
-  if (method === "GET" && path.length === 2 && path[0] === "admin" && ["booking-requests", "players", "coach-availability", "training-programs", "training-sessions"].includes(path[1])) return true;
+  if (method === "GET" && path.length === 2 && path[0] === "admin" && ["booking-requests", "players", "coach-availability", "training-programs", "training-sessions", "approved-clients"].includes(path[1])) return true;
   if (method === "POST" && path.length === 2 && path[0] === "coach" && path[1] === "availability") return true;
   if (method === "GET" && path.length === 2 && path[0] === "coach" && path[1] === "availability") return true;
   if (method === "GET" && path.length === 2 && path[0] === "coach" && path[1] === "sessions") return true;

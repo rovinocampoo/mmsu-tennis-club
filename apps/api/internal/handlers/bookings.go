@@ -176,6 +176,32 @@ func AdminBookingRequests(repo training.BookingRepository, logger interface{ Pri
 	}
 }
 
+
+func AdminApprovedClients(repo training.BookingRepository, logger interface{ Printf(string, ...any) }) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if repo == nil {
+			writeBookingError(w, http.StatusServiceUnavailable, "approved clients are temporarily unavailable")
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		clients, err := repo.ListApprovedClients(ctx)
+		if err != nil {
+			writeBookingRepoError(w, logger, "list approved clients", err)
+			return
+		}
+
+		if clients == nil {
+			clients = []training.ApprovedClientRecord{}
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{"clients": clients})
+	}
+}
+
+
 func AdminPlayerSearch(repo training.BookingRepository, logger interface{ Printf(string, ...any) }) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if repo == nil {
