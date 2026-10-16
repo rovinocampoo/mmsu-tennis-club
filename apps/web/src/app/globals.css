@@ -1006,3 +1006,1068 @@ button.calendar-day.outside-month { background: #f6f8f5; }
   .recurrence-preview-heading { flex-wrap: wrap; }
   .recurrence-preview-heading .recurrence-refresh { flex: 1 1 100%; }
 }
+
+/* MMSU training-page motion system: subtle, scroll-triggered, and accessible. */
+.training-page.motion-enabled [data-reveal] {
+  opacity: 0;
+  translate: 0 18px;
+  transition:
+    opacity 560ms cubic-bezier(.2, .7, .2, 1),
+    translate 560ms cubic-bezier(.2, .7, .2, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+.training-page.motion-enabled [data-reveal="left"] { translate: -20px 0; }
+.training-page.motion-enabled [data-reveal="right"] { translate: 20px 0; }
+
+.training-page.motion-enabled [data-reveal].is-revealed {
+  opacity: 1;
+  translate: 0 0;
+}
+
+/* Short stagger: a little rhythm, without delaying the content for long. */
+.training-page.motion-enabled .session-list > .session-card:nth-child(2),
+.training-page.motion-enabled .program-catalog > .program-catalog-item:nth-child(2) {
+  --reveal-delay: 70ms;
+}
+.training-page.motion-enabled .session-list > .session-card:nth-child(3),
+.training-page.motion-enabled .program-catalog > .program-catalog-item:nth-child(3) {
+  --reveal-delay: 130ms;
+}
+.training-page.motion-enabled .session-list > .session-card:nth-child(4),
+.training-page.motion-enabled .program-catalog > .program-catalog-item:nth-child(4) {
+  --reveal-delay: 180ms;
+}
+
+/* Quiet hover and focus feedback for interactive cards and calendar dates. */
+.training-page .session-card {
+  transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+}
+.training-page .session-card:hover,
+.training-page .session-card:focus-within {
+  transform: translateY(-3px);
+  border-color: #d5e2cf;
+  box-shadow: 0 14px 32px #173d2915;
+}
+.training-page .calendar-day {
+  transition: background-color 180ms ease, box-shadow 180ms ease;
+}
+.training-page .calendar-day:hover:not(.selected) { background-color: #f1f6eb; }
+.training-page .calendar-day.selected .calendar-day-number {
+  animation: mmsu-date-select 260ms cubic-bezier(.2, .7, .2, 1) both;
+}
+.training-page .program-catalog-item {
+  transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+}
+.training-page .program-catalog-item:hover { transform: translateY(-2px); }
+.training-page .program-catalog-item[open] .program-catalog-details {
+  animation: mmsu-program-open 240ms ease both;
+  transform-origin: top;
+}
+
+#selected-date-agenda,
+#admin-selected-date-agenda { scroll-margin-top: 24px; }
+
+@keyframes mmsu-date-select {
+  0% { scale: .92; }
+  70% { scale: 1.06; }
+  100% { scale: 1; }
+}
+@keyframes mmsu-program-open {
+  from { opacity: 0; translate: 0 -4px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .training-page.motion-enabled [data-reveal],
+  .training-page.motion-enabled [data-reveal].is-revealed,
+  .training-page .session-card,
+  .training-page .calendar-day,
+  .training-page .calendar-day.selected .calendar-day-number,
+  .training-page .program-catalog-item,
+  .training-page .program-catalog-item[open] .program-catalog-details {
+    animation: none !important;
+    opacity: 1 !important;
+    translate: none !important;
+    scale: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .training-page .session-card:hover,
+  .training-page .session-card:focus-within,
+  .training-page .program-catalog-item:hover {
+    translate: none;
+    transform: none;
+  }
+}
+
+/* ==========================================
+   MMSU TENNIS CLUB — HOMEPAGE MOTION DESIGN
+   ========================================== */
+
+.home-page {
+  overflow: clip;
+  background: #f7f8f2;
+  color: #183126;
+}
+
+.home-header {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  width: 100%;
+  max-width: 1440px;
+  height: 84px;
+  margin: 0 auto;
+  padding: 0 clamp(22px, 6vw, 88px);
+  background: #f7f8f2;
+}
+
+.home-brand {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 11px;
+  color: #123d2b;
+  text-decoration: none;
+}
+
+.home-brand-mark {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 50%;
+  background: #123d2b;
+  color: #fff;
+  font: 800 1.15rem "Manrope", sans-serif;
+}
+
+.home-brand strong,
+.home-brand small {
+  display: block;
+  line-height: 1.1;
+}
+
+.home-brand strong {
+  font: 800 1rem "Manrope", sans-serif;
+  letter-spacing: 0.06em;
+}
+
+.home-brand small {
+  margin-top: 4px;
+  font-size: 0.61rem;
+  font-weight: 800;
+  letter-spacing: 0.17em;
+}
+
+.home-nav {
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 3vw, 34px);
+}
+
+.home-nav a,
+.home-footer nav a {
+  color: #506257;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: color 180ms ease;
+}
+
+.home-nav a:hover,
+.home-footer nav a:hover {
+  color: #123d2b;
+}
+
+.home-nav .home-nav-cta {
+  display: inline-flex;
+  min-height: 43px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border: 1px solid #123d2b;
+  border-radius: 3px;
+  background: #123d2b;
+  color: #fff;
+  transition:
+    background-color 180ms ease,
+    transform 180ms ease;
+}
+
+.home-nav .home-nav-cta:hover {
+  transform: translateY(-2px);
+  background: #20553b;
+  color: #fff;
+}
+
+.home-hero {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  min-height: min(760px, calc(100svh - 84px));
+  align-items: center;
+  overflow: hidden;
+  padding: 100px clamp(24px, 9vw, 140px);
+  background: #0b1d15;
+  color: #fff;
+}
+
+.home-hero-photo {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  background-color: #10291d;
+  background-image: url("/images/mmsu-courts-night.png");
+  background-position: center 53%;
+  background-repeat: no-repeat;
+  background-size: cover;
+  transform: scale(1.025);
+  will-change: transform;
+}
+
+.home-hero::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background:
+    linear-gradient(
+      90deg,
+      rgb(5 18 12 / 88%) 0%,
+      rgb(5 18 12 / 73%) 37%,
+      rgb(5 18 12 / 34%) 72%,
+      rgb(5 18 12 / 25%) 100%
+    ),
+    linear-gradient(
+      0deg,
+      rgb(5 18 12 / 47%) 0%,
+      transparent 38%,
+      rgb(5 18 12 / 12%) 100%
+    );
+  content: "";
+}
+
+.home-hero-content {
+  width: min(100%, 840px);
+}
+
+.home-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 27px;
+  color: #d3e0d5;
+  font-size: 0.69rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  line-height: 1.7;
+}
+
+.home-eyebrow > span {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: #d1ed72;
+  box-shadow: 0 0 14px rgb(209 237 114 / 35%);
+}
+
+.home-hero h1 {
+  max-width: 950px;
+  margin: 0;
+  color: #fff;
+  font: 800 clamp(3.2rem, 8.4vw, 7.5rem) / 0.99
+    "Manrope", sans-serif;
+  letter-spacing: -0.075em;
+}
+
+.home-hero h1 span {
+  color: #d1ed72;
+}
+
+.home-hero-description {
+  max-width: 490px;
+  margin: 27px 0 0;
+  color: #e0e9e2;
+  font-size: clamp(0.98rem, 1.5vw, 1.12rem);
+  line-height: 1.85;
+}
+
+.home-hero-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px 28px;
+  margin-top: 33px;
+}
+
+.home-primary-cta {
+  display: inline-flex;
+  min-height: 51px;
+  align-items: center;
+  justify-content: center;
+  gap: 25px;
+  padding: 0 20px;
+  border: 1px solid #d1ed72;
+  border-radius: 3px;
+  background: #d1ed72;
+  color: #123322;
+  font-size: 0.84rem;
+  font-weight: 800;
+  text-decoration: none;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.home-primary-cta span {
+  transition: transform 180ms ease;
+}
+
+.home-primary-cta:hover {
+  transform: translateY(-2px);
+  border-color: #e1f5a0;
+  background: #e1f5a0;
+}
+
+.home-primary-cta:hover span {
+  transform: translate(3px, -2px);
+}
+
+.home-secondary-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: #fff;
+  font-size: 0.81rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.home-secondary-cta span {
+  color: #d1ed72;
+  transition: transform 180ms ease;
+}
+
+.home-secondary-cta:hover span {
+  transform: translateY(3px);
+}
+
+.home-hero-caption,
+.home-hero-number {
+  position: absolute;
+  bottom: 31px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #e3e8e1;
+  font-size: 0.61rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+}
+
+.home-hero-caption {
+  left: clamp(24px, 9vw, 140px);
+}
+
+.home-caption-line {
+  width: 27px;
+  height: 1px;
+  background: #d1ed72;
+}
+
+.home-hero-number {
+  right: clamp(24px, 6vw, 88px);
+  color: #b4c4b8;
+}
+
+.home-hero-number span {
+  color: #d1ed72;
+}
+
+/* The thin divider and rolling tennis ball. */
+
+.home-court-rule {
+  position: relative;
+  width: min(1100px, calc(100% - 48px));
+  height: 76px;
+  margin: 0 auto;
+}
+
+.home-court-rule::before {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: #dbe2d7;
+  content: "";
+}
+
+.home-rally-ball {
+  position: absolute;
+  top: calc(50% - 7px);
+  left: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #c5e35c;
+  box-shadow: 0 2px 6px rgb(18 61 43 / 18%);
+}
+
+/* Club introduction. */
+
+.home-intro {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 44px clamp(24px, 5vw, 64px) 105px;
+}
+
+.home-section-label {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 36px;
+  color: #67806d;
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.home-section-label > span:first-child {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  border: 1px solid #d4dfd1;
+  border-radius: 50%;
+  color: #123d2b;
+  font-size: 0.7rem;
+  letter-spacing: 0;
+}
+
+.home-intro-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.7fr;
+  align-items: start;
+  gap: clamp(32px, 7vw, 100px);
+}
+
+.home-intro h2,
+.home-process h2,
+.home-final-cta h2 {
+  margin: 0;
+  font: 800 clamp(2.3rem, 5vw, 4.4rem) / 1.07
+    "Manrope", sans-serif;
+  letter-spacing: -0.065em;
+}
+
+.home-intro h2 {
+  color: #123d2b;
+}
+
+.home-intro h2 span {
+  color: #82977f;
+}
+
+.home-intro-copy p {
+  margin: 0 0 15px;
+  color: #647369;
+  font-size: 0.94rem;
+  line-height: 1.85;
+}
+
+.home-text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #a2b49c;
+  color: #123d2b;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.home-text-link span {
+  transition: transform 180ms ease;
+}
+
+.home-text-link:hover span {
+  transform: translate(3px, -2px);
+}
+
+.home-values {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px;
+  margin-top: 77px;
+}
+
+.home-value-card {
+  min-width: 0;
+  padding: 24px 22px 28px;
+  border: 1px solid #e2e8de;
+  border-radius: 4px;
+  background: #fbfcf8;
+  transition:
+    border-color 200ms ease,
+    background-color 200ms ease,
+    transform 200ms ease,
+    box-shadow 200ms ease;
+}
+
+.home-value-card:hover {
+  transform: translateY(-4px);
+  border-color: #cbd8c5;
+  background: #fff;
+  box-shadow: 0 12px 30px rgb(18 61 43 / 6%);
+}
+
+.home-value-index {
+  color: #87958a;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.home-value-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  margin: 29px 0 24px;
+  place-items: center;
+  border-radius: 50%;
+  background: #eaf0e4;
+  color: #285b3d;
+}
+
+.home-value-icon svg {
+  width: 29px;
+  height: 29px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.home-value-card h3 {
+  margin: 0;
+  color: #173e2b;
+  font: 750 1.04rem / 1.35 "Manrope", sans-serif;
+  letter-spacing: -0.025em;
+}
+
+.home-value-card p {
+  margin: 10px 0 0;
+  color: #6a796e;
+  font-size: 0.82rem;
+  line-height: 1.7;
+}
+
+/* Three-step booking section. */
+
+.home-process {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr;
+  align-items: start;
+  gap: 50px 9%;
+  padding: 88px clamp(24px, 9vw, 140px) 96px;
+  background: #123d2b;
+  color: #fff;
+}
+
+.home-section-label-light {
+  color: #b7ccba;
+}
+
+.home-section-label-light > span:first-child {
+  border-color: #426652;
+  color: #d1ed72;
+}
+
+.home-process h2 {
+  color: #fff;
+}
+
+.home-process h2 span {
+  color: #d1ed72;
+}
+
+.home-process-heading > p {
+  max-width: 350px;
+  margin: 20px 0 0;
+  color: #c2d2c5;
+  font-size: 0.91rem;
+  line-height: 1.8;
+}
+
+.home-steps {
+  border-top: 1px solid #426652;
+}
+
+.home-step {
+  display: grid;
+  grid-template-columns: 41px minmax(0, 1fr) 24px;
+  align-items: start;
+  gap: 15px;
+  padding: 24px 0;
+  border-bottom: 1px solid #426652;
+}
+
+.home-step-number {
+  padding-top: 3px;
+  color: #d1ed72;
+  font-size: 0.69rem;
+  font-weight: 800;
+}
+
+.home-step h3 {
+  margin: 0;
+  color: #fff;
+  font: 750 1rem / 1.4 "Manrope", sans-serif;
+}
+
+.home-step p {
+  margin: 6px 0 0;
+  color: #c2d2c5;
+  font-size: 0.81rem;
+  line-height: 1.7;
+}
+
+.home-step-arrow {
+  color: #d1ed72;
+  transition: transform 180ms ease;
+}
+
+.home-step:hover .home-step-arrow {
+  transform: translate(3px, -3px);
+}
+
+.home-process > .home-primary-cta {
+  justify-self: start;
+}
+
+/* Final CTA: court-inspired line work. */
+
+.home-final-cta {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  padding: 104px 24px 110px;
+  background: #eaf0e4;
+  text-align: center;
+}
+
+.home-final-cta > :not(.home-final-court-lines) {
+  position: relative;
+}
+
+.home-final-cta .home-eyebrow {
+  color: #56705d;
+}
+
+.home-final-cta h2 {
+  color: #123d2b;
+}
+
+.home-final-cta h2 span {
+  color: #78916f;
+}
+
+.home-final-cta > p:not(.home-eyebrow) {
+  max-width: 440px;
+  margin: 19px 0 25px;
+  color: #65756a;
+  font-size: 0.9rem;
+  line-height: 1.8;
+}
+
+.home-final-court-lines {
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  left: 50%;
+  width: min(720px, 85%);
+  height: 270px;
+  border: 1px solid rgb(18 61 43 / 9%);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.home-final-court-lines span {
+  position: absolute;
+  inset-block: 0;
+  left: 25%;
+  width: 1px;
+  background: rgb(18 61 43 / 9%);
+}
+
+.home-final-court-lines span:nth-child(2) {
+  left: 50%;
+}
+
+.home-final-court-lines span:nth-child(3) {
+  left: 75%;
+}
+
+.home-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 25px;
+  max-width: 1440px;
+  min-height: 100px;
+  margin: 0 auto;
+  padding: 24px clamp(22px, 6vw, 88px);
+}
+
+.home-footer > p {
+  margin: 0;
+  color: #78877c;
+  font-size: 0.61rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+
+.home-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 17px;
+}
+
+.home-footer nav a {
+  font-size: 0.72rem;
+}
+
+/* Clear keyboard focus. */
+
+.home-page a:focus-visible {
+  outline: 3px solid #8ba83f;
+  outline-offset: 4px;
+}
+
+/* Entrance and scroll-triggered motion. */
+
+@keyframes home-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes home-photo-settle {
+  from {
+    transform: scale(1.07);
+  }
+
+  to {
+    transform: scale(1.025);
+  }
+}
+
+@keyframes home-ball-roll {
+  0% {
+    left: 0;
+    transform: rotate(0);
+  }
+
+  78% {
+    left: calc(100% - 14px);
+    transform: rotate(680deg);
+  }
+
+  88% {
+    left: calc(100% - 14px);
+    transform: translateY(-5px) rotate(725deg);
+  }
+
+  100% {
+    left: calc(100% - 14px);
+    transform: rotate(720deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .home-hero-photo {
+    animation: home-photo-settle 1.6s ease-out both;
+  }
+
+  .home-eyebrow {
+    animation: home-fade-up 650ms 80ms both;
+  }
+
+  .home-hero h1 {
+    animation: home-fade-up 750ms 180ms both;
+  }
+
+  .home-hero-description {
+    animation: home-fade-up 750ms 300ms both;
+  }
+
+  .home-hero-actions {
+    animation: home-fade-up 750ms 420ms both;
+  }
+
+  .home-rally-ball {
+    animation: home-ball-roll 2.5s 500ms cubic-bezier(.2, .7, .25, 1) both;
+  }
+
+  .home-step:hover .home-step-arrow {
+    transform: translate(3px, -3px);
+  }
+}
+
+/* Use native scroll timelines where supported.
+   Content stays visible in browsers without scroll-timeline support. */
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .home-reveal {
+      animation: home-scroll-reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 40%;
+    }
+
+    @keyframes home-scroll-reveal {
+      from {
+        opacity: 0;
+        transform: translateY(25px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  }
+}
+
+/* Responsive layout. */
+
+@media (max-width: 760px) {
+  .home-header {
+    height: 72px;
+    padding-inline: 20px;
+  }
+
+  .home-brand-mark {
+    width: 36px;
+    height: 36px;
+  }
+
+  .home-nav {
+    gap: 14px;
+  }
+
+  .home-nav > a:not(.home-nav-cta) {
+    display: none;
+  }
+
+  .home-nav .home-nav-cta {
+    min-height: 39px;
+    gap: 8px;
+    padding-inline: 11px;
+    font-size: 0.73rem;
+  }
+
+  .home-hero {
+    min-height: 690px;
+    min-height: min(760px, calc(100svh - 72px));
+    padding: 85px 25px 105px;
+  }
+
+  .home-hero-photo {
+    background-position: 57% center;
+  }
+
+  .home-hero::before {
+    background:
+      linear-gradient(
+        90deg,
+        rgb(5 18 12 / 82%) 0%,
+        rgb(5 18 12 / 56%) 100%
+      ),
+      linear-gradient(
+        0deg,
+        rgb(5 18 12 / 52%) 0%,
+        transparent 72%
+      );
+  }
+
+  .home-eyebrow {
+    max-width: 350px;
+    font-size: 0.6rem;
+    letter-spacing: 0.105em;
+  }
+
+  .home-hero h1 {
+    font-size: clamp(3.1rem, 11vw, 5.1rem);
+  }
+
+  .home-hero-description {
+    max-width: 400px;
+    font-size: 0.94rem;
+  }
+
+  .home-hero-caption {
+    left: 25px;
+    font-size: 0.55rem;
+  }
+
+  .home-hero-number {
+    right: 25px;
+    font-size: 0.53rem;
+  }
+
+  .home-intro {
+    padding: 34px 24px 72px;
+  }
+
+  .home-section-label {
+    margin-bottom: 28px;
+  }
+
+  .home-intro-grid {
+    grid-template-columns: 1fr;
+    gap: 23px;
+  }
+
+  .home-intro h2,
+  .home-process h2,
+  .home-final-cta h2 {
+    font-size: clamp(2.5rem, 9vw, 3.6rem);
+  }
+
+  .home-values {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-top: 44px;
+  }
+
+  .home-value-card {
+    display: grid;
+    grid-template-columns: 50px minmax(0, 1fr);
+    column-gap: 15px;
+    padding: 19px;
+  }
+
+  .home-value-index {
+    grid-column: 1 / -1;
+  }
+
+  .home-value-icon {
+    grid-row: 2 / span 2;
+    width: 46px;
+    height: 46px;
+    margin: 19px 0 0;
+  }
+
+  .home-value-card h3 {
+    align-self: end;
+    margin-top: 18px;
+  }
+
+  .home-value-card p {
+    margin-top: 5px;
+  }
+
+  .home-process {
+    grid-template-columns: 1fr;
+    gap: 39px;
+    padding: 68px 25px 72px;
+  }
+
+  .home-process-heading > p {
+    max-width: 440px;
+  }
+
+  .home-final-cta {
+    padding: 78px 23px 82px;
+  }
+
+  .home-footer {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 25px 22px;
+  }
+
+  .home-footer > p {
+    order: 3;
+    width: 100%;
+    text-align: left;
+  }
+
+  .home-footer nav {
+    gap: 13px;
+  }
+}
+
+@media (max-width: 400px) {
+  .home-nav .home-nav-cta {
+    font-size: 0.68rem;
+  }
+
+  .home-hero {
+    padding-inline: 20px;
+  }
+
+  .home-hero h1 {
+    font-size: 2.85rem;
+  }
+
+  .home-hero-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .home-hero-caption {
+    left: 20px;
+  }
+
+  .home-hero-number {
+    right: 20px;
+  }
+
+  .home-footer nav {
+    flex-wrap: wrap;
+  }
+}
+
+/* Honor operating-system reduced-motion settings. */
+
+@media (prefers-reduced-motion: reduce) {
+  .home-page *,
+  .home-page *::before,
+  .home-page *::after {
+    scroll-behavior: auto !important;
+    animation-delay: 0ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .home-hero-photo {
+    transform: none;
+  }
+
+  .home-rally-ball {
+    left: calc(100% - 14px);
+  }
+}

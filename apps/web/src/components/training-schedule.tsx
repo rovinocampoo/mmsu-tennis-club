@@ -65,7 +65,7 @@ function sessionDateKey(session: TrainingSession) {
 function SessionCard({ session }: { session: TrainingSession }) {
   const availability = sessionAvailability(session);
   return (
-    <article className="session-card" key={session.id}>
+    <article className="session-card" key={session.id} data-reveal="up">
       <div className="session-date">
         <span>
           {compactDate.format(new Date(session.starts_at)).split(" ")[0]}
@@ -231,7 +231,7 @@ export default function TrainingSchedule({
 
   return (
     <>
-      <div className="training-explorer">
+      <div className="training-explorer" data-reveal="up">
         <p className="training-explorer-kicker">EXPLORE THE CLUB</p>
         <div
           className="training-view-tabs"
@@ -280,14 +280,14 @@ export default function TrainingSchedule({
         hidden={primaryTab !== "sessions"}
         tabIndex={-1}
       >
-        <div className="schedule-heading">
+        <div className="schedule-heading" data-reveal="up">
           <div>
             <p className="section-kicker">FIND A TIME THAT WORKS</p>
             <h2 id="schedule-heading">Published sessions</h2>
           </div>
           <p className="timezone-note">All times are Philippine Time (PHT)</p>
         </div>
-        <div className="schedule-toolbar">
+        <div className="schedule-toolbar" data-reveal="up">
           <p>
             {sessions.length} {sessions.length === 1 ? "session" : "sessions"}{" "}
             available to explore
@@ -366,7 +366,7 @@ export default function TrainingSchedule({
               className="training-calendar"
               role="grid"
               aria-label={`Training sessions for ${calendarMonth.format(monthStart)}`}
-            >
+             data-reveal="up">
               {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(
                 (weekday) => (
                   <div
@@ -424,7 +424,7 @@ export default function TrainingSchedule({
               className="calendar-day-agenda"
               id="selected-date-agenda"
               style={{ scrollMarginTop: "24px" }}
-            >
+             data-reveal="up">
               <div className="agenda-heading">
                 <div>
                   <p className="section-kicker">SELECTED DATE</p>
@@ -489,7 +489,7 @@ export default function TrainingSchedule({
         ) : null}
         <div className="program-catalog">
           {programCards.map((program) => (
-            <details className="program-catalog-item" key={program.id}>
+            <details className="program-catalog-item" key={program.id} data-reveal="up">
               <summary className="program-catalog-summary">
                 <span className="program-catalog-icon" aria-hidden="true">
                   ↗

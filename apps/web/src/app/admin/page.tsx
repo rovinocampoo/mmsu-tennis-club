@@ -428,10 +428,19 @@ export default function AdminPage() {
         </Link>
         <nav className="portal-nav" aria-label="Club navigation">
           <Link href="/training">Public schedule</Link>
+
           {sessionState.status === "authenticated" && (
             <Link href="/admin/approved-clients">Approved clients</Link>
           )}
-        </nav>{" "}
+
+          <a
+            href="https://rallyledger-web.vercel.app/"
+            rel="noopener noreferrer"
+            aria-label="Open RallyLedger"
+          >
+            RallyLedger ↗
+          </a>
+        </nav>
       </header>
       <section className="admin-main">
         {sessionState.status === "checking" ? (
