@@ -75,8 +75,9 @@ function todayManilaDateKey() {
 function calendarDates(year: number, month: number): CalendarDate[] {
   const firstDay = new Date(Date.UTC(year, month - 1, 1));
 
-  // Make Monday the first day of the calendar week.
-  firstDay.setUTCDate(firstDay.getUTCDate() - ((firstDay.getUTCDay() + 6) % 7));
+  firstDay.setUTCDate(
+    firstDay.getUTCDate() - ((firstDay.getUTCDay() + 6) % 7),
+  );
 
   return Array.from({ length: 42 }, (_, index) => {
     const date = new Date(firstDay);
@@ -87,7 +88,9 @@ function calendarDates(year: number, month: number): CalendarDate[] {
     return {
       key,
       day: date.getUTCDate(),
-      inMonth: key.slice(0, 7) === `${year}-${String(month).padStart(2, "0")}`,
+      inMonth:
+        key.slice(0, 7) ===
+        `${year}-${String(month).padStart(2, "0")}`,
     };
   });
 }
@@ -200,7 +203,9 @@ export default function ApprovedClientsPage() {
   const [sessionFilter, setSessionFilter] = useState("");
   const [coachFilter, setCoachFilter] = useState("");
 
+  const [showPastBookings, setShowPastBookings] = useState(false);
   const [view, setView] = useState<ScheduleView>("list");
+
   const [selectedDate, setSelectedDate] = useState(todayManilaDateKey);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const today = todayManilaDateKey();
@@ -210,6 +215,8 @@ export default function ApprovedClientsPage() {
       month: Number(today.slice(5, 7)),
     };
   });
+
+  const todayKey = todayManilaDateKey();
 
   useEffect(() => {
     if (!supabase) {
@@ -324,15 +331,27 @@ export default function ApprovedClientsPage() {
     }
   }, [authStatus, loadClients]);
 
+  // Hide past sessions by default. Records remain in memory and in the database.
+  const visibleRecords = useMemo(() => {
+    if (showPastBookings) return records;
+
+    return records.filter(
+      (record) => manilaDateKey(record.starts_at) >= todayKey,
+    );
+  }, [records, showPastBookings, todayKey]);
+
+  const hiddenPastBookingCount = records.length - visibleRecords.length;
+
   const programs = useMemo(
-    () => [...new Set(records.map((record) => record.program_name))].sort(),
-    [records],
+    () =>
+      [...new Set(visibleRecords.map((record) => record.program_name))].sort(),
+    [visibleRecords],
   );
 
   const sessions = useMemo(() => {
     const byId = new Map<string, ApprovedClient>();
 
-    for (const record of records) {
+    for (const record of visibleRecords) {
       if (!byId.has(record.session_id)) {
         byId.set(record.session_id, record);
       }
@@ -341,12 +360,12 @@ export default function ApprovedClientsPage() {
     return [...byId.values()].sort((a, b) =>
       a.starts_at.localeCompare(b.starts_at),
     );
-  }, [records]);
+  }, [visibleRecords]);
 
   const coaches = useMemo(() => {
     const byId = new Map<string, string>();
 
-    for (const record of records) {
+    for (const record of visibleRecords) {
       if (record.assigned_coach_id) {
         byId.set(
           record.assigned_coach_id,
@@ -356,16 +375,16 @@ export default function ApprovedClientsPage() {
     }
 
     return [...byId.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [records]);
+  }, [visibleRecords]);
 
-  const hasUnassignedCoach = records.some(
+  const hasUnassignedCoach = visibleRecords.some(
     (record) => !record.assigned_coach_id,
   );
 
   const filteredRecords = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return records
+    return visibleRecords
       .filter((record) => {
         const searchableText = [
           record.player_name,
@@ -396,7 +415,7 @@ export default function ApprovedClientsPage() {
       })
       .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
   }, [
-    records,
+    visibleRecords,
     search,
     dateFrom,
     dateTo,
@@ -439,7 +458,8 @@ export default function ApprovedClientsPage() {
 
   const selectedDateRecords = recordsByDate.get(selectedDate) ?? [];
 
-  const hasResultsToDisplay = loadStatus === "ready" || records.length > 0;
+  const hasResultsToDisplay =
+    loadStatus === "ready" || records.length > 0;
 
   function resetFilters() {
     setSearch("");
@@ -455,15 +475,12 @@ export default function ApprovedClientsPage() {
       Date.UTC(calendarMonth.year, calendarMonth.month - 1 + direction, 1, 12),
     );
 
-    const nextMonth = {
+    setCalendarMonth({
       year: next.getUTCFullYear(),
       month: next.getUTCMonth() + 1,
-    };
+    });
 
-    const nextDateKey = next.toISOString().slice(0, 10);
-
-    setCalendarMonth(nextMonth);
-    setSelectedDate(nextDateKey);
+    setSelectedDate(next.toISOString().slice(0, 10));
   }
 
   function selectCalendarDate(day: CalendarDate) {
@@ -550,9 +567,9 @@ export default function ApprovedClientsPage() {
                 <h1>Approved clients</h1>
                 <p className={`admin-help ${styles.description}`}>
                   View confirmed training bookings and the players attending
-                  each session. Search by player, filter by date, program or
-                  coach, and switch between the booking list and calendar. All
-                  times are shown in Philippine time.
+                  each session. Past sessions are hidden by default, but remain
+                  available for reference. All times are shown in Philippine
+                  time.
                 </p>
               </div>
 
@@ -565,6 +582,7 @@ export default function ApprovedClientsPage() {
                 >
                   {loadStatus === "loading" ? "Refreshing…" : "Refresh"}
                 </button>
+
                 <button
                   className="admin-button secondary"
                   type="button"
@@ -578,12 +596,14 @@ export default function ApprovedClientsPage() {
             {error && loadStatus === "error" && (
               <section className="admin-state form-error" role="alert">
                 <p>{error}</p>
+
                 {records.length > 0 && (
                   <p>
                     Previously loaded bookings remain visible. Refresh to try
                     loading the latest data again.
                   </p>
                 )}
+
                 <button
                   className="admin-button secondary"
                   type="button"
@@ -607,7 +627,9 @@ export default function ApprovedClientsPage() {
                   aria-label="Filtered booking totals"
                 >
                   <div className={`approved-stat ${styles.stat}`}>
-                    <span className={styles.statLabel}>Confirmed bookings</span>
+                    <span className={styles.statLabel}>
+                      Confirmed bookings
+                    </span>
                     <strong className={styles.statValue}>
                       {filteredRecords.length}
                     </strong>
@@ -746,9 +768,30 @@ export default function ApprovedClientsPage() {
                     </label>
                   </div>
 
+                  <div className={styles.archiveControl}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={showPastBookings}
+                        onChange={(event) =>
+                          setShowPastBookings(event.target.checked)
+                        }
+                      />
+                      <span>Show past bookings</span>
+                    </label>
+
+                    <p>
+                      {!showPastBookings && hiddenPastBookingCount > 0
+                        ? `${countLabel(hiddenPastBookingCount, "past booking")} hidden. `
+                        : ""}
+                      Past bookings are hidden from this view, not deleted.
+                    </p>
+                  </div>
+
                   <p className={`admin-help ${styles.filterSummary}`}>
-                    Showing {filteredRecords.length} of {records.length}{" "}
-                    confirmed {records.length === 1 ? "booking" : "bookings"}.
+                    Showing {filteredRecords.length} of {visibleRecords.length}{" "}
+                    visible confirmed{" "}
+                    {visibleRecords.length === 1 ? "booking" : "bookings"}.
                   </p>
                 </section>
 
@@ -779,6 +822,7 @@ export default function ApprovedClientsPage() {
                       >
                         List
                       </button>
+
                       <button
                         type="button"
                         className={view === "calendar" ? "active" : ""}
@@ -795,7 +839,9 @@ export default function ApprovedClientsPage() {
                       <div className="admin-state">
                         {records.length === 0
                           ? "No confirmed bookings have been recorded yet."
-                          : "No bookings match your current filters. Try changing your search."}
+                          : visibleRecords.length === 0 && !showPastBookings
+                            ? "There are no current or upcoming bookings. Enable Show past bookings to view historical records."
+                            : "No bookings match your current filters. Try changing your search."}
                       </div>
                     ) : (
                       <div
@@ -852,7 +898,7 @@ export default function ApprovedClientsPage() {
 
                           {dates.map((day) => {
                             const dayRecords = recordsByDate.get(day.key) ?? [];
-                            const isToday = day.key === todayManilaDateKey();
+                            const isToday = day.key === todayKey;
                             const isSelected = selectedDate === day.key;
 
                             const dayClassNames = [
@@ -947,11 +993,14 @@ export default function ApprovedClientsPage() {
 
                         {selectedDateRecords.length === 0 ? (
                           <div className="admin-state">
-                            {filteredRecords.length === 0 && records.length > 0
-                              ? "No bookings match your current filters."
-                              : records.length === 0
-                                ? "No confirmed bookings have been recorded yet."
-                                : "No confirmed bookings on this date. Select another day to view its bookings."}
+                            {records.length === 0
+                              ? "No confirmed bookings have been recorded yet."
+                              : visibleRecords.length === 0 &&
+                                  !showPastBookings
+                                ? "There are no current or upcoming bookings. Enable Show past bookings to view historical records."
+                                : filteredRecords.length === 0
+                                  ? "No bookings match your current filters."
+                                  : "No confirmed bookings on this date. Select another day to view its bookings."}
                           </div>
                         ) : (
                           <div
