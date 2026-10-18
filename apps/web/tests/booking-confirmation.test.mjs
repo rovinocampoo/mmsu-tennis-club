@@ -49,8 +49,10 @@ test("admin approval copy contains schedule details and an add-to-calendar link"
   assert.match(message, /Hi Rovin Ocampo/);
   assert.match(message, /Oct 21, 2026/);
   assert.match(message, /5:30 AM–7:00 AM PHT/);
-  assert.match(message, /Add to your calendar: https:\/\/calendar\.google\.com/);
+  assert.match(message, /Visit your private booking status page to add this booking to your calendar and check for updates/);
+  assert.doesNotMatch(message, /calendar\.google\.com\/calendar\/render/);
   assert.match(message, /MMSU Tennis Court/);
+  assert.doesNotMatch(message, /https:\/\/calendar\.google\.com/);
   assert.doesNotMatch(message, /opaqueToken/);
 });
 

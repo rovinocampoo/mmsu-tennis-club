@@ -141,9 +141,7 @@ export function createAdminApprovalMessage(request) {
     "🕒 " + timeFmt.format(startsAt) + "–" + timeFmt.format(endsAt) + " PHT",
     "📍 " + request.location,
     "",
-    "➕ Add to your calendar: " + createGoogleCalendarURL(status),
-    "",
-    "You can revisit the private status link you received when you submitted your request to check for updates.",
+    "Visit your private booking status page to add this booking to your calendar and check for updates.",
     "",
     "See you on court! 🎾"
   ].join("\n");

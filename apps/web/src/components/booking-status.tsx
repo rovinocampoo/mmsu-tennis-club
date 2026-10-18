@@ -219,6 +219,12 @@ export default function BookingStatus() {
                 </a>
                 <button className="request-copy" type="button" onClick={downloadCalendarFile}>Download calendar file (.ics)</button>
                 <p className="request-note">Times are shown in Philippine Time (PHT).</p>
+                <p className="request-note booking-timetree-help">
+                  Using TimeTree? Download the calendar file, add it to your phone&apos;s calendar, then import it into your shared TimeTree calendar.{" "}
+                  <a href="https://support.timetreeapp.com/hc/en-us/articles/360000639742-I-want-to-share-another-calendar-such-as-Google-Calendar" target="_blank" rel="noopener noreferrer">
+                    How to import
+                  </a>
+                </p>
               </div>}
               <div className="booking-message-actions">
                 <button className="request-copy" type="button" onClick={() => void copyBookingMessage()}>
