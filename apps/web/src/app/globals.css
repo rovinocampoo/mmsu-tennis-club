@@ -2085,3 +2085,65 @@ button.calendar-day.outside-month { background: #f6f8f5; }
 .admin-calendar-actions { margin-top: 4px; }
 .booking-timetree-link { color: var(--green); font-size: .8rem; font-weight: 700; text-underline-offset: 3px; }
 .booking-timetree-link:focus-visible { outline: 3px solid #9ab738; outline-offset: 3px; }
+
+/* Selected-date calendar agenda: keep session details above mobile actions. */
+.session-agenda-card {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.session-agenda-details {
+  min-width: 0;
+  width: 100%;
+}
+
+.session-agenda-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.session-agenda-actions .admin-button {
+  min-width: 0;
+  min-height: 40px;
+  width: 100%;
+  white-space: normal;
+}
+
+@media (max-width: 760px) {
+  .admin-day-agenda .session-agenda-card {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .admin-day-agenda .session-agenda-details {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .admin-day-agenda .session-agenda-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+
+  .admin-day-agenda .session-agenda-actions .admin-button {
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    padding: 9px 8px;
+    font-size: 0.75rem;
+    white-space: normal;
+  }
+
+  .admin-day-agenda .session-agenda-actions .admin-button:first-child {
+    grid-column: 1 / -1;
+  }
+}
+
