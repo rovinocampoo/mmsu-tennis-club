@@ -18,6 +18,7 @@ import {
   initialAdminSessionState,
 } from "@/lib/admin-session-state.mjs";
 import AdminSchedule from "@/components/admin-schedule";
+import { createAdminApprovalMessage } from "@/lib/booking-confirmation.mjs";
 
 type RequestRow = {
   id: string;
@@ -93,6 +94,8 @@ export default function AdminPage() {
   const [approvalNotification, setApprovalNotification] =
     useState<ApprovalNotification | null>(null);
   const [notificationBusy, setNotificationBusy] = useState(false);
+  const [bookingConfirmation, setBookingConfirmation] = useState<{ requestId: string; message: string } | null>(null);
+  const [bookingConfirmationCopyNotice, setBookingConfirmationCopyNotice] = useState("");
   const requestLoadInFlight = useRef(false);
 
   const adminFetch = useCallback(
@@ -318,6 +321,7 @@ export default function AdminPage() {
     createNew = false,
   ) {
     if (sessionState.status !== "authenticated") return;
+    const requestToApprove = action === "approve" ? requests.find((request) => request.id === id) : undefined;
     setBusy(true);
     setError("");
     setNotice("");
@@ -344,8 +348,24 @@ export default function AdminPage() {
       if (action === "approve") {
         setApprovalNotification({ requestId: id, ...data });
         setNotice("Booking approved and confirmed.");
+        setBookingConfirmation(
+          requestToApprove && requestToApprove.ends_at
+            ? {
+                requestId: id,
+                message: createAdminApprovalMessage({
+                  full_name: requestToApprove.full_name,
+                  starts_at: requestToApprove.starts_at,
+                  ends_at: requestToApprove.ends_at,
+                  location: requestToApprove.location,
+                }),
+              }
+            : null,
+        );
+        setBookingConfirmationCopyNotice("");
       } else {
         setApprovalNotification(null);
+        setBookingConfirmation(null);
+        setBookingConfirmationCopyNotice("");
         setNotice("Request rejected. No approval email was sent.");
       }
       await loadRequests();
@@ -354,6 +374,31 @@ export default function AdminPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function copyBookingConfirmation() {
+    if (!bookingConfirmation) return;
+    setBookingConfirmationCopyNotice("");
+    try {
+      await navigator.clipboard.writeText(bookingConfirmation.message);
+      setBookingConfirmationCopyNotice("Confirmation copied. Paste it into Messenger or SMS.");
+      return;
+    } catch {
+      // Fall back for browsers without Clipboard API access.
+    }
+    const textarea = document.createElement("textarea");
+    textarea.value = bookingConfirmation.message;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    let copied = false;
+    try { copied = document.execCommand("copy"); } catch { copied = false; }
+    textarea.remove();
+    setBookingConfirmationCopyNotice(copied
+      ? "Confirmation copied. Paste it into Messenger or SMS."
+      : "Your browser blocked copying. Select the message below and copy it manually.");
   }
 
   async function retryApprovalNotification() {
@@ -610,6 +655,26 @@ export default function AdminPage() {
                   <p className="admin-state form-success" role="status">
                     {notice}
                   </p>
+                )}
+                {bookingConfirmation && (
+                  <section className="admin-state form-success booking-confirmation-state" role="status" aria-live="polite">
+                    <strong>Approval message ready to send</strong>
+                    <p>Copy this confirmation and send it to the requester through Messenger or SMS.</p>
+                    <textarea
+                      className="booking-confirmation-text"
+                      aria-label="Generated booking confirmation message"
+                      value={bookingConfirmation.message}
+                      readOnly
+                      rows={10}
+                      onFocus={(event) => event.currentTarget.select()}
+                    />
+                    <div className="admin-actions">
+                      <button className="admin-button" type="button" onClick={() => void copyBookingConfirmation()}>
+                        Copy confirmation message
+                      </button>
+                    </div>
+                    {bookingConfirmationCopyNotice && <p className="admin-help" role="status" aria-live="polite">{bookingConfirmationCopyNotice}</p>}
+                  </section>
                 )}
                 {approvalNotification && (
                   <section
