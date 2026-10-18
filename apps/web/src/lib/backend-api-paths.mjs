@@ -8,6 +8,8 @@ export function isBackendRouteAllowed(method, path) {
   if (method === "GET" && path.length === 2 && path[0] === "coach" && path[1] === "sessions") return true;
   if (method === "DELETE" && path.length === 3 && path[0] === "coach" && path[1] === "availability" && uuid.test(path[2])) return true;
   if (method === "POST" && path.length === 2 && path[0] === "admin" && path[1] === "training-sessions") return true;
+  if (method === "POST" && path.length === 3 && path[0] === "admin" && path[1] === "training-sessions" && path[2] === "batch") return true;
+  if (method === "PUT" && path.length === 3 && path[0] === "admin" && path[1] === "training-sessions" && uuid.test(path[2])) return true;
   if (method === "PATCH" && path.length === 3 && path[0] === "admin" && path[1] === "training-sessions" && uuid.test(path[2])) return true;
   if (method === "PATCH" && path.length === 4 && path[0] === "admin" && path[1] === "training-sessions" && uuid.test(path[2]) && path[3] === "coach") return true;
   if (method === "POST" && path.length === 4 && path[0] === "admin" && path[1] === "booking-requests" && uuid.test(path[2]) && ["approve", "reject"].includes(path[3])) return true;

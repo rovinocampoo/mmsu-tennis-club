@@ -27,6 +27,7 @@ type RequestRow = {
   phone: string | null;
   created_at: string;
   starts_at: string;
+  ends_at?: string;
   location: string;
   session_status: string;
 };
@@ -756,9 +757,25 @@ function RequestCard({
           "No contact details"}
         <br />
         Session:{" "}
-        {new Date(row.starts_at).toLocaleString("en-PH", {
+        {new Date(row.starts_at).toLocaleDateString("en-PH", {
           timeZone: "Asia/Manila",
         })}{" "}
+        ·{" "}
+        {new Date(row.starts_at).toLocaleTimeString("en-PH", {
+          timeZone: "Asia/Manila",
+          hour: "numeric",
+          minute: "2-digit",
+        })}
+        {row.ends_at && (
+          <>
+            {" – "}
+            {new Date(row.ends_at).toLocaleTimeString("en-PH", {
+              timeZone: "Asia/Manila",
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </>
+        )}{" "}
         · {row.location} · {row.session_status}
       </p>
       <label>

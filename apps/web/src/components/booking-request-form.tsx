@@ -7,10 +7,13 @@ import {
 } from "./booking-request-form-state.mjs";
 
 export default function BookingRequestForm({
+  sessionIds,
   sessionId,
 }: {
-  sessionId: string;
+  sessionIds?: string[];
+  sessionId?: string;
 }) {
+  const requestedSessionIDs = sessionIds ?? (sessionId ? [sessionId] : []);
   const [open, setOpen] = useState(false);
   const [request, dispatch] = useReducer(
     bookingRequestReducer,
@@ -33,7 +36,9 @@ export default function BookingRequestForm({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          session_id: sessionId,
+          ...(requestedSessionIDs.length === 1
+            ? { session_id: requestedSessionIDs[0] }
+            : { session_ids: requestedSessionIDs }),
           full_name: data.get("full_name"),
           email: data.get("email"),
           phone: data.get("phone"),

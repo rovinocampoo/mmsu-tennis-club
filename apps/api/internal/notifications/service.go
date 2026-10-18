@@ -2,6 +2,7 @@ package notifications
 
 import (
 	"context"
+	"errors"
 	"log"
 )
 
@@ -71,7 +72,21 @@ func (s *Service) NotifyApproved(ctx context.Context, requestID string) Result {
 }
 
 func (s *Service) finishFailure(ctx context.Context, requestID string, attempt int, cause error) {
-	s.logger.Printf("approval notification provider failed (error type %T)", cause)
+	var invalidResponse *resendInvalidResponseError
+	var rejection *resendRejectionError
+	if errors.As(cause, &invalidResponse) {
+		s.logger.Printf("approval notification provider failed (provider=resend failure=invalid_response)")
+	} else if errors.As(cause, &rejection) {
+		if rejection.name == "" {
+			s.logger.Printf("approval notification provider failed (provider=resend http_status=%d)", rejection.statusCode)
+		} else {
+			s.logger.Printf("approval notification provider failed (provider=resend http_status=%d provider_error=%s)", rejection.statusCode, rejection.name)
+		}
+	} else {
+		// Preserve type-only diagnostics for non-Resend errors to avoid exposing
+		// arbitrary error strings that may contain sensitive request data.
+		s.logger.Printf("approval notification provider failed (error type %T)", cause)
+	}
 	if _, err := s.repository.CompleteApprovalNotification(ctx, requestID, attempt, false, ""); err != nil {
 		s.logger.Printf("approval notification failure status save failed (error type %T)", err)
 	}

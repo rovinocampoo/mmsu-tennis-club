@@ -21,10 +21,11 @@ import (
 )
 
 type bookingRequestInput struct {
-	SessionID string `json:"session_id"`
-	FullName  string `json:"full_name"`
-	Email     string `json:"email"`
-	Phone     string `json:"phone"`
+	SessionID  string   `json:"session_id"`
+	SessionIDs []string `json:"session_ids"`
+	FullName   string   `json:"full_name"`
+	Email      string   `json:"email"`
+	Phone      string   `json:"phone"`
 }
 
 type bookingRequestAccepted struct {
@@ -46,10 +47,32 @@ func BookingRequest(repo training.BookingRepository, logger interface{ Printf(st
 		input.FullName = strings.TrimSpace(input.FullName)
 		input.Email = strings.ToLower(strings.TrimSpace(input.Email))
 		input.Phone = strings.TrimSpace(input.Phone)
-		if !validUUID(input.SessionID) || input.FullName == "" || !utf8.ValidString(input.FullName) || utf8.RuneCountInString(input.FullName) > 200 {
-			writeBookingError(w, http.StatusBadRequest, "session_id and a full_name of 1 to 200 characters are required")
+		if len(input.SessionIDs) == 0 && input.SessionID != "" {
+			input.SessionIDs = []string{input.SessionID}
+		}
+		if input.SessionID != "" && len(input.SessionIDs) > 0 && input.SessionID != input.SessionIDs[0] {
+			writeBookingError(w, http.StatusBadRequest, "provide either session_id or matching session_ids")
 			return
 		}
+		if len(input.SessionIDs) < 1 || len(input.SessionIDs) > 8 || input.FullName == "" || !utf8.ValidString(input.FullName) || utf8.RuneCountInString(input.FullName) > 200 {
+			writeBookingError(w, http.StatusBadRequest, "select 1 to 8 session slots and provide a full_name of 1 to 200 characters")
+			return
+		}
+		seenSessionIDs := make(map[string]struct{}, len(input.SessionIDs))
+		for index, id := range input.SessionIDs {
+			id = strings.ToLower(strings.TrimSpace(id))
+			if !validUUID(id) {
+				writeBookingError(w, http.StatusBadRequest, "one or more selected session IDs are invalid")
+				return
+			}
+			if _, exists := seenSessionIDs[id]; exists {
+				writeBookingError(w, http.StatusBadRequest, "a session slot was selected more than once")
+				return
+			}
+			seenSessionIDs[id] = struct{}{}
+			input.SessionIDs[index] = id
+		}
+		input.SessionID = input.SessionIDs[0]
 		if input.Email == "" && input.Phone == "" {
 			writeBookingError(w, http.StatusBadRequest, "provide an email address or phone number")
 			return
@@ -79,7 +102,7 @@ func BookingRequest(repo training.BookingRepository, logger interface{ Printf(st
 		tokenHash := sha256.Sum256(tokenBytes[:])
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		reference, err := repo.CreateRequest(ctx, training.BookingRequest{SessionID: input.SessionID, FullName: input.FullName, Email: input.Email, Phone: input.Phone}, tokenHash[:])
+		reference, err := repo.CreateRequest(ctx, training.BookingRequest{SessionID: input.SessionID, SessionIDs: input.SessionIDs, FullName: input.FullName, Email: input.Email, Phone: input.Phone}, tokenHash[:])
 		if err != nil {
 			writeBookingRepoError(w, logger, "create booking request", err)
 			return
@@ -365,6 +388,14 @@ func writeBookingRepoError(w http.ResponseWriter, logger interface{ Printf(strin
 			writeBookingError(w, http.StatusConflict, "selected player is unavailable")
 		case "PZ006":
 			writeBookingError(w, http.StatusNotFound, "booking request not found")
+		case "PZ007":
+			writeBookingError(w, http.StatusConflict, "one or more selected slots conflict with the schedule")
+		case "PZ008":
+			writeBookingError(w, http.StatusConflict, "schedule changes require explicit acknowledgement because bookings already exist")
+		case "PZ009":
+			writeBookingError(w, http.StatusConflict, "capacity cannot be lower than the number of confirmed bookings")
+		case "PZ010":
+			writeBookingError(w, http.StatusBadRequest, "select adjacent slots from the same program, date, and location")
 		default:
 			logBookingError(logger, operation, err)
 			writeBookingError(w, http.StatusInternalServerError, "booking request could not be processed")

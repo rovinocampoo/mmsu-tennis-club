@@ -1,0 +1,549 @@
+
+.root {
+  margin-block: 1.5rem;
+}
+
+.form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.fields label {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+  font-weight: 600;
+}
+
+
+.fields input,
+.fields select,
+.fields textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid #cbd5cc;
+  border-radius: 0.7rem;
+  background-color: #ffffff;
+  color: #183d2b;
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  box-shadow: 0 1px 2px rgb(18 61 43 / 5%);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+
+.fields select {
+  cursor: pointer;
+  padding-right: 2.25rem;
+}
+
+.fields input::placeholder,
+.fields textarea::placeholder {
+  color: #89958b;
+  opacity: 1;
+}
+
+.fields input:hover,
+.fields select:hover,
+.fields textarea:hover {
+  border-color: #91a698;
+}
+
+.fields input:focus,
+.fields select:focus,
+.fields textarea:focus {
+  outline: none;
+  border-color: #245b3e;
+  box-shadow: 0 0 0 3px rgb(36 91 62 / 14%);
+}
+
+.fields input:disabled,
+.fields select:disabled,
+.fields textarea:disabled {
+  cursor: not-allowed;
+  background-color: #f0f3ef;
+  color: #768278;
+  opacity: 1;
+}
+
+.fields input[type="checkbox"],
+.fields input[type="radio"] {
+  width: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  height: 18px;
+  padding: 0;
+  accent-color: #245b3e;
+  box-shadow: none;
+}
+
+.fields input[type="date"],
+.fields input[type="time"],
+.fields input[type="number"] {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fields input,
+  .fields select,
+  .fields textarea {
+    transition: none;
+  }
+}
+
+.weekdays,
+.slotPicker {
+  min-width: 0;
+  border: 1px solid var(--line, #d9e2d8);
+  border-radius: 1rem;
+  padding: 1rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.weekdays legend,
+.slotPicker legend {
+  padding-inline: 0.35rem;
+  font-weight: 700;
+}
+
+.weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+}
+
+.weekdays label,
+.publish,
+.warningBox label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.slotPicker > p {
+  margin: 0;
+  color: var(--muted, #66756c);
+}
+
+.slotGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.slotGrid label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.8rem;
+  padding: 0.7rem;
+  border: 1px solid var(--line, #d9e2d8);
+  border-radius: 0.75rem;
+  cursor: pointer;
+  background: var(--paper, #f7f8f2);
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+.slotGrid label:focus-within {
+  outline: 2px solid var(--green, #123d2b);
+  outline-offset: 2px;
+}
+
+.slotGrid label input,
+.publish input,
+.weekdays input,
+.warningBox input {
+  accent-color: var(--green, #123d2b);
+  flex: 0 0 auto;
+}
+
+.slotGrid .slotSelected {
+  border-color: var(--green, #123d2b);
+  background: color-mix(in srgb, var(--lime, #d1ed72) 25%, white);
+}
+
+.publish {
+  align-self: start;
+  flex-wrap: wrap;
+}
+
+.warning {
+  margin: 0;
+  padding: 0.8rem;
+  background: #fff4d6;
+  border-radius: 0.6rem;
+  color: #744d00;
+}
+
+.previewHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.previewHead h3 {
+  margin: 0.15rem 0;
+}
+
+.previewHead > span {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.previewList {
+  display: grid;
+  gap: 0.4rem;
+  max-height: 20rem;
+  overflow: auto;
+}
+
+.previewRow {
+  display: grid;
+  grid-template-columns:
+    minmax(6rem, 0.7fr)
+    minmax(7rem, 0.6fr)
+    minmax(0, 2fr);
+  gap: 0.6rem;
+  align-items: start;
+  border: 1px solid var(--line, #d9e2d8);
+  border-radius: 0.6rem;
+  padding: 0.65rem 0.8rem;
+}
+
+.previewRow small {
+  grid-column: 1 / -1;
+  color: #8b2d23;
+  overflow-wrap: anywhere;
+}
+
+.previewConflict {
+  border-color: #d88377;
+  background: #fff4f1;
+}
+
+.editForm {
+  display: grid;
+  gap: 1rem;
+  border: 1px solid var(--green, #123d2b);
+  border-radius: 1rem;
+  padding: 1rem;
+  margin-block: 1rem;
+}
+
+.editFormHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.editFormHead h3 {
+  margin: 0.15rem 0;
+}
+
+.warningBox {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+  border: 1px solid #c9872b;
+  border-radius: 0.8rem;
+  background: #fff8e8;
+}
+
+.warningBox p {
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .fields {
+    grid-template-columns: 1fr;
+  }
+
+  .slotGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .previewRow {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .editFormHead {
+    align-items: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slotGrid label {
+    transition: none;
+  }
+}
+
+.slotOption {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.slotOption label {
+  min-width: 0;
+}
+
+.slotOption label span {
+  overflow-wrap: anywhere;
+}
+
+.customBadge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  color: #587262;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.removeCustomSlot {
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--line, #d9e2d8);
+  border-radius: 0.5rem;
+  background: #fff;
+  color: #74433b;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.removeCustomSlot:hover {
+  border-color: #c9877b;
+  background: #fff4f1;
+}
+
+.customSlot {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px dashed var(--line, #d9e2d8);
+  border-radius: 0.85rem;
+  background: var(--paper, #f7f8f2);
+}
+
+.customSlot h4 {
+  margin: 0;
+  color: var(--green, #123d2b);
+}
+
+.customTimeFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.customTimeFields label {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.customTimeFields input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid #cbd5cc;
+  border-radius: 0.7rem;
+  background: #fff;
+  color: #183d2b;
+  font: inherit;
+}
+
+.customTimeFields input:focus {
+  outline: none;
+  border-color: #245b3e;
+  box-shadow: 0 0 0 3px rgb(36 91 62 / 14%);
+}
+
+@media (max-width: 720px) {
+  .customTimeFields {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+.reviewPanel {
+  display: grid;
+  gap: 0.85rem;
+  margin-block: 0.5rem;
+}
+
+.reviewHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.reviewHeading h3 {
+  margin: 0.15rem 0 0;
+  font-size: 1.1rem;
+}
+
+.reviewStats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.reviewStats > span {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--line, #d9e2d8);
+  border-radius: 999px;
+  background: #fff;
+  color: #334b3c;
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.reviewStats .clearBadge {
+  color: #315b3c;
+}
+
+.reviewStats .conflictBadge {
+  border-color: #d9a39b;
+  background: #fff4f1;
+  color: #8b2d23;
+}
+
+.reviewDates {
+  display: grid;
+  gap: 0.65rem;
+  max-height: 24rem;
+  overflow-y: auto;
+  padding-right: 0.15rem;
+}
+
+.reviewDateCard {
+  min-width: 0;
+  border: 1px solid var(--line, #d9e2d8);
+  border-radius: 0.75rem;
+  background: #fff;
+  overflow: hidden;
+}
+
+.reviewDateHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  background: #f5f7f2;
+  border-bottom: 1px solid var(--line, #d9e2d8);
+}
+
+.reviewDateHeading strong {
+  color: #183d2b;
+  font-size: 0.9rem;
+}
+
+.reviewDateHeading > span {
+  flex-shrink: 0;
+  color: #66756c;
+  font-size: 0.78rem;
+}
+
+.reviewTimeList {
+  display: grid;
+}
+
+.reviewTimeRow {
+  display: grid;
+  grid-template-columns: 0.45rem minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.65rem;
+  row-gap: 0.25rem;
+  padding: 0.65rem 0.85rem;
+}
+
+.reviewTimeRow + .reviewTimeRow {
+  border-top: 1px solid #edf0eb;
+}
+
+.reviewTimeDot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: #67886c;
+}
+
+.reviewTimeName {
+  color: #263c2d;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.reviewTimeConflict .reviewTimeDot {
+  background: #bb493b;
+}
+
+.reviewTimeConflict {
+  background: #fff8f6;
+}
+
+.reviewConflictText {
+  grid-column: 2;
+  color: #8b2d23;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.reviewEmpty {
+  margin: 0;
+  padding: 1rem;
+  border: 1px dashed var(--line, #d9e2d8);
+  border-radius: 0.75rem;
+  color: var(--muted, #66756c);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 520px) {
+  .reviewDateHeading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+}
+
+.creationNotice {
+  margin: 0.75rem 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid #b7dfc2;
+  border-radius: 0.75rem;
+  background: #eefaf0;
+  color: #19512d;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}

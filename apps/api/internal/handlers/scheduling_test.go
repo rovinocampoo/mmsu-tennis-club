@@ -24,6 +24,9 @@ type schedulingRepoStub struct {
 	assignedCoachID     *string
 	assignmentSessionID string
 	createdSessionID    string
+	createdBatch        []training.TrainingSessionCreateInput
+	editedSessionID     string
+	editedSession       training.TrainingSessionEditInput
 }
 
 const (
@@ -104,6 +107,21 @@ func (s *schedulingRepoStub) CreateTrainingSession(_ context.Context, programID 
 		IsPublic:  isPublic,
 	})
 	return s.createdSessionID, nil
+}
+
+func (s *schedulingRepoStub) CreateTrainingSessions(_ context.Context, sessions []training.TrainingSessionCreateInput) ([]string, error) {
+	s.createdBatch = append([]training.TrainingSessionCreateInput(nil), sessions...)
+	ids := make([]string, len(sessions))
+	for i := range sessions {
+		ids[i] = testSessionID
+	}
+	return ids, nil
+}
+
+func (s *schedulingRepoStub) EditTrainingSession(_ context.Context, sessionID string, input training.TrainingSessionEditInput) error {
+	s.editedSessionID = sessionID
+	s.editedSession = input
+	return nil
 }
 
 func (s *schedulingRepoStub) UpdateTrainingSession(_ context.Context, sessionID string, status *string, notes *string, isPublic *bool) error {
@@ -335,5 +353,63 @@ func TestAdminAssignTrainingSessionCoachValidatesAndSupportsUnassignment(t *test
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("missing coach_id status=%d", rec.Code)
+	}
+}
+
+func TestAdminCreateTrainingSessionsBatchValidatesAndSubmitsEverySlotTogether(t *testing.T) {
+	repo := &schedulingRepoStub{}
+	start := time.Date(2026, 10, 20, 8, 0, 0, 0, time.UTC)
+	payload, _ := json.Marshal(map[string]any{"sessions": []map[string]any{
+		{"program_id": testProgramID, "starts_at": start, "ends_at": start.Add(time.Hour), "location": "MMSU Court 1", "capacity": 4, "notes": "morning", "is_public": false, "coach_id": nil},
+		{"program_id": testProgramID, "starts_at": start.Add(time.Hour), "ends_at": start.Add(2 * time.Hour), "location": "MMSU Court 1", "capacity": 4, "notes": "morning", "is_public": false, "coach_id": nil},
+	}})
+	rec := httptest.NewRecorder()
+	AdminCreateTrainingSessionsBatch(repo, log.New(io.Discard, "", 0)).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/admin/training-sessions/batch", bytes.NewReader(payload)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(repo.createdBatch) != 2 || repo.createdBatch[0].IsPublic || repo.createdBatch[1].Location != "MMSU Court 1" {
+		t.Fatalf("batch sessions = %#v", repo.createdBatch)
+	}
+}
+
+func TestAdminCreateTrainingSessionsBatchRejectsInvalidSessionWithoutCallingRepository(t *testing.T) {
+	repo := &schedulingRepoStub{}
+	payload, _ := json.Marshal(map[string]any{"sessions": []map[string]any{{
+		"program_id": testProgramID,
+		"starts_at":  time.Now().Add(time.Hour),
+		"ends_at":    time.Now(),
+		"location":   "MMSU Court 1",
+	}}})
+	rec := httptest.NewRecorder()
+	AdminCreateTrainingSessionsBatch(repo, log.New(io.Discard, "", 0)).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/admin/training-sessions/batch", bytes.NewReader(payload)))
+	if rec.Code != http.StatusBadRequest || len(repo.createdBatch) != 0 {
+		t.Fatalf("status=%d sessions=%d body=%s", rec.Code, len(repo.createdBatch), rec.Body.String())
+	}
+}
+
+func TestAdminEditTrainingSessionRequiresFullScheduleAndPassesAcknowledgement(t *testing.T) {
+	repo := &schedulingRepoStub{}
+	start := time.Date(2026, 10, 22, 9, 0, 0, 0, time.UTC)
+	capacity := 5
+	payload, _ := json.Marshal(map[string]any{
+		"program_id":                 testProgramID,
+		"starts_at":                  start,
+		"ends_at":                    start.Add(2 * time.Hour),
+		"location":                   "MMSU Court 2",
+		"capacity":                   capacity,
+		"notes":                      "edited",
+		"is_public":                  true,
+		"acknowledge_booked_changes": true,
+	})
+	req := httptest.NewRequest(http.MethodPut, "/api/admin/training-sessions/"+testSessionID, bytes.NewReader(payload))
+	req.SetPathValue("id", testSessionID)
+	rec := httptest.NewRecorder()
+	AdminEditTrainingSession(repo, log.New(io.Discard, "", 0)).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.editedSessionID != testSessionID || !repo.editedSession.AcknowledgeBookedChanges || !repo.editedSession.IsPublic || *repo.editedSession.Capacity != capacity {
+		t.Fatalf("edited session = %#v id=%q", repo.editedSession, repo.editedSessionID)
 	}
 }

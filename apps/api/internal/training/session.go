@@ -35,10 +35,33 @@ type Repository interface {
 
 // BookingRequest is a public request for a spot; it does not reserve capacity.
 type BookingRequest struct {
-	SessionID string
-	FullName  string
-	Email     string
-	Phone     string
+	SessionID  string
+	SessionIDs []string
+	FullName   string
+	Email      string
+	Phone      string
+}
+
+type TrainingSessionCreateInput struct {
+	ProgramID string    `json:"program_id"`
+	StartsAt  time.Time `json:"starts_at"`
+	EndsAt    time.Time `json:"ends_at"`
+	Location  string    `json:"location"`
+	Capacity  *int      `json:"capacity"`
+	Notes     string    `json:"notes"`
+	IsPublic  bool      `json:"is_public"`
+	CoachID   *string   `json:"coach_id"`
+}
+
+type TrainingSessionEditInput struct {
+	ProgramID                string
+	StartsAt                 time.Time
+	EndsAt                   time.Time
+	Location                 string
+	Capacity                 *int
+	Notes                    string
+	IsPublic                 bool
+	AcknowledgeBookedChanges bool
 }
 
 type PublicBookingStatus struct {
@@ -59,6 +82,7 @@ type BookingRequestRecord struct {
 	Status        string    `json:"status"`
 	CreatedAt     time.Time `json:"created_at"`
 	StartsAt      time.Time `json:"starts_at"`
+	EndsAt        time.Time `json:"ends_at"`
 	Location      string    `json:"location"`
 	SessionStatus string    `json:"session_status"`
 }

@@ -3,11 +3,13 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/rovinocampoo/mmsu-tennis-club/apps/api/internal/adminauth"
 	"github.com/rovinocampoo/mmsu-tennis-club/apps/api/internal/training"
 )
@@ -242,6 +244,7 @@ type adminCreateSessionRequest struct {
 	Capacity  *int      `json:"capacity"`
 	Notes     string    `json:"notes"`
 	IsPublic  *bool     `json:"is_public"`
+	CoachID   *string   `json:"coach_id"`
 }
 
 func AdminCreateTrainingSession(repo training.BookingRepository, logger *log.Logger) http.HandlerFunc {
@@ -280,8 +283,7 @@ func AdminCreateTrainingSession(repo training.BookingRepository, logger *log.Log
 
 		id, err := repo.CreateTrainingSession(ctx, req.ProgramID, req.StartsAt, req.EndsAt, req.Location, req.Capacity, req.Notes, isPublic)
 		if err != nil {
-			logger.Printf("admin create training session failed: %v", err)
-			writeError(w, http.StatusInternalServerError, "could not create training session")
+			writeSchedulingRepositoryError(w, logger, "admin create training session", err)
 			return
 		}
 
@@ -289,6 +291,172 @@ func AdminCreateTrainingSession(repo training.BookingRepository, logger *log.Log
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]string{"id": id})
 	}
+}
+
+type sessionBatchRepository interface {
+	CreateTrainingSessions(context.Context, []training.TrainingSessionCreateInput) ([]string, error)
+}
+
+// AdminCreateTrainingSessionsBatch creates every requested slot in one database call.
+// The database function runs as one statement, so a conflict rolls the entire batch back.
+func AdminCreateTrainingSessionsBatch(repo training.BookingRepository, logger *log.Logger) http.HandlerFunc {
+	if logger == nil {
+		logger = log.Default()
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if repo == nil {
+			writeError(w, http.StatusServiceUnavailable, "scheduling service is temporarily unavailable")
+			return
+		}
+		batchRepo, ok := any(repo).(sessionBatchRepository)
+		if !ok {
+			writeError(w, http.StatusServiceUnavailable, "batch scheduling is temporarily unavailable")
+			return
+		}
+		var req struct {
+			Sessions []adminCreateSessionRequest `json:"sessions"`
+		}
+		if !decodeJSON(w, r, &req, 512*1024) {
+			return
+		}
+		if len(req.Sessions) < 1 || len(req.Sessions) > 500 {
+			writeError(w, http.StatusBadRequest, "provide between 1 and 500 sessions")
+			return
+		}
+		sessions := make([]training.TrainingSessionCreateInput, 0, len(req.Sessions))
+		for _, item := range req.Sessions {
+			item.ProgramID = strings.ToLower(strings.TrimSpace(item.ProgramID))
+			item.Location = strings.TrimSpace(item.Location)
+			item.Notes = strings.TrimSpace(item.Notes)
+			if !validUUID(item.ProgramID) || item.StartsAt.IsZero() || item.EndsAt.IsZero() || !item.StartsAt.Before(item.EndsAt) || item.Location == "" || len(item.Location) > 200 || len(item.Notes) > 2000 {
+				writeError(w, http.StatusBadRequest, "each session needs a program, valid start/end times, and a location")
+				return
+			}
+			if item.Capacity != nil && *item.Capacity <= 0 {
+				writeError(w, http.StatusBadRequest, "capacity must be a positive whole number or null")
+				return
+			}
+			if item.CoachID != nil {
+				coachID := strings.ToLower(strings.TrimSpace(*item.CoachID))
+				if !validUUID(coachID) {
+					writeError(w, http.StatusBadRequest, "coach_id must be a UUID or null")
+					return
+				}
+				item.CoachID = &coachID
+			}
+			isPublic := true
+			if item.IsPublic != nil {
+				isPublic = *item.IsPublic
+			}
+			sessions = append(sessions, training.TrainingSessionCreateInput{
+				ProgramID: item.ProgramID, StartsAt: item.StartsAt, EndsAt: item.EndsAt,
+				Location: item.Location, Capacity: item.Capacity, Notes: item.Notes,
+				IsPublic: isPublic, CoachID: item.CoachID,
+			})
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+		defer cancel()
+		ids, err := batchRepo.CreateTrainingSessions(ctx, sessions)
+		if err != nil {
+			writeSchedulingRepositoryError(w, logger, "admin create training sessions batch", err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]any{"ids": ids, "created": len(ids)})
+	}
+}
+
+type sessionEditRepository interface {
+	EditTrainingSession(context.Context, string, training.TrainingSessionEditInput) error
+}
+
+type adminEditSessionRequest struct {
+	ProgramID                string    `json:"program_id"`
+	StartsAt                 time.Time `json:"starts_at"`
+	EndsAt                   time.Time `json:"ends_at"`
+	Location                 string    `json:"location"`
+	Capacity                 *int      `json:"capacity"`
+	Notes                    string    `json:"notes"`
+	IsPublic                 *bool     `json:"is_public"`
+	AcknowledgeBookedChanges bool      `json:"acknowledge_booked_changes"`
+}
+
+func AdminEditTrainingSession(repo training.BookingRepository, logger *log.Logger) http.HandlerFunc {
+	if logger == nil {
+		logger = log.Default()
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		sessionID := strings.ToLower(strings.TrimSpace(r.PathValue("id")))
+		if !validUUID(sessionID) {
+			writeError(w, http.StatusBadRequest, "session id is invalid")
+			return
+		}
+		if repo == nil {
+			writeError(w, http.StatusServiceUnavailable, "scheduling service is temporarily unavailable")
+			return
+		}
+		editRepo, ok := any(repo).(sessionEditRepository)
+		if !ok {
+			writeError(w, http.StatusServiceUnavailable, "session editing is temporarily unavailable")
+			return
+		}
+		var req adminEditSessionRequest
+		if !decodeJSON(w, r, &req, 8192) {
+			return
+		}
+		req.ProgramID = strings.ToLower(strings.TrimSpace(req.ProgramID))
+		req.Location = strings.TrimSpace(req.Location)
+		req.Notes = strings.TrimSpace(req.Notes)
+		if !validUUID(req.ProgramID) || req.StartsAt.IsZero() || req.EndsAt.IsZero() || !req.StartsAt.Before(req.EndsAt) || req.Location == "" || len(req.Location) > 200 || len(req.Notes) > 2000 || req.IsPublic == nil {
+			writeError(w, http.StatusBadRequest, "program, valid start/end times, location, and publication status are required")
+			return
+		}
+		if req.Capacity != nil && *req.Capacity <= 0 {
+			writeError(w, http.StatusBadRequest, "capacity must be a positive whole number or null")
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+		defer cancel()
+		err := editRepo.EditTrainingSession(ctx, sessionID, training.TrainingSessionEditInput{
+			ProgramID: req.ProgramID, StartsAt: req.StartsAt, EndsAt: req.EndsAt,
+			Location: req.Location, Capacity: req.Capacity, Notes: req.Notes,
+			IsPublic: *req.IsPublic, AcknowledgeBookedChanges: req.AcknowledgeBookedChanges,
+		})
+		if err != nil {
+			writeSchedulingRepositoryError(w, logger, "admin edit training session", err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+	}
+}
+
+func writeSchedulingRepositoryError(w http.ResponseWriter, logger interface{ Printf(string, ...any) }, operation string, err error) {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case "PZ001", "P0002":
+			writeError(w, http.StatusConflict, "training session or program is unavailable")
+		case "PZ002", "PZ009":
+			writeError(w, http.StatusConflict, "capacity conflicts with existing bookings")
+		case "PZ004":
+			writeError(w, http.StatusConflict, "the selected coach is unavailable")
+		case "PZ007":
+			writeError(w, http.StatusConflict, "one or more selected slots conflict with the existing schedule; no sessions were created")
+		case "PZ008":
+			writeError(w, http.StatusConflict, "confirm the warning before changing a session that has confirmed bookings")
+		case "PZ011":
+			writeError(w, http.StatusConflict, "resolve pending booking requests before changing this session's date, time, program, or venue")
+		case "22023":
+			writeError(w, http.StatusBadRequest, "session details are invalid")
+		default:
+			logger.Printf("%s failed (database code %s)", operation, pgErr.Code)
+			writeError(w, http.StatusInternalServerError, "could not save the training schedule")
+		}
+		return
+	}
+	if logger != nil {
+		logger.Printf("%s failed (error type %T)", operation, err)
+	}
+	writeError(w, http.StatusInternalServerError, "could not save the training schedule")
 }
 
 type adminUpdateSessionRequest struct {
@@ -337,8 +505,7 @@ func AdminUpdateTrainingSession(repo training.BookingRepository, logger *log.Log
 		defer cancel()
 
 		if err := repo.UpdateTrainingSession(ctx, sessionID, req.Status, req.Notes, req.IsPublic); err != nil {
-			logger.Printf("admin update training session failed: %v", err)
-			writeError(w, http.StatusInternalServerError, "could not update training session")
+			writeSchedulingRepositoryError(w, logger, "admin update training session", err)
 			return
 		}
 
@@ -391,8 +558,7 @@ func AdminAssignTrainingSessionCoach(repo training.BookingRepository, logger *lo
 		defer cancel()
 
 		if err := repo.AssignTrainingSessionCoach(ctx, sessionID, coachID); err != nil {
-			logger.Printf("assign coach to training session failed: %v", err)
-			writeError(w, http.StatusInternalServerError, "could not assign coach to training session")
+			writeSchedulingRepositoryError(w, logger, "assign coach to training session", err)
 			return
 		}
 

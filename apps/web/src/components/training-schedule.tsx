@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import BookingRequestForm from "@/components/booking-request-form";
+import styles from "./training-slot-selection.module.css";
 import type { TrainingProgram, TrainingSession } from "@/lib/training-sessions";
 
 type ScheduleView = "list" | "calendar";
@@ -62,7 +63,15 @@ function sessionDateKey(session: TrainingSession) {
   return phtDateKey(new Date(session.starts_at));
 }
 
-function SessionCard({ session }: { session: TrainingSession }) {
+function SessionCard({
+  session,
+  selected,
+  onToggle,
+}: {
+  session: TrainingSession;
+  selected: boolean;
+  onToggle: (sessionID: string) => void;
+}) {
   const availability = sessionAvailability(session);
   return (
     <article className="session-card" key={session.id} data-reveal="up">
@@ -120,7 +129,14 @@ function SessionCard({ session }: { session: TrainingSession }) {
       </div>
       <div className="session-action">
         {canRequestBooking(session) ? (
-          <BookingRequestForm sessionId={session.id} />
+          <label className={styles.slotSelect}>
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggle(session.id)}
+            />
+            <span>{selected ? "Slot selected" : "Select this slot"}</span>
+          </label>
         ) : (
           <span className="session-unavailable">
             {availability.kind === "full"
@@ -148,6 +164,7 @@ export default function TrainingSchedule({
 }) {
   const [view, setView] = useState<ScheduleView>("calendar");
   const [primaryTab, setPrimaryTab] = useState<PrimaryTab>("sessions");
+  const [selectedSessionIDs, setSelectedSessionIDs] = useState<string[]>([]);
   const [month, setMonth] = useState(() => {
     const [year, monthNumber] = initialMonth.split("-").map(Number);
     return { year, month: monthNumber };
@@ -196,6 +213,54 @@ export default function TrainingSchedule({
   const selectedDaySessions = (sessionsByDate.get(selectedDay) || []).sort(
     (a, b) => a.starts_at.localeCompare(b.starts_at),
   );
+
+  const selectedSessions = useMemo(
+    () =>
+      selectedSessionIDs
+        .map((id) => sessions.find((session) => session.id === id))
+        .filter((session): session is TrainingSession => Boolean(session))
+        .sort((a, b) => a.starts_at.localeCompare(b.starts_at)),
+    [selectedSessionIDs, sessions],
+  );
+
+  const selectedSlotError = useMemo(() => {
+    if (selectedSessions.length !== selectedSessionIDs.length) {
+      return "One of the selected slots is no longer available. Refresh the page and select your times again.";
+    }
+    if (selectedSessions.length > 8) {
+      return "Select no more than eight consecutive slots in one request.";
+    }
+    if (selectedSessions.some((session) => !canRequestBooking(session))) {
+      return "One or more selected slots are no longer available. Remove them or refresh the schedule.";
+    }
+    if (selectedSessions.length < 2) return null;
+    const first = selectedSessions[0];
+    for (let index = 1; index < selectedSessions.length; index += 1) {
+      const previous = selectedSessions[index - 1];
+      const current = selectedSessions[index];
+      if (
+        sessionDateKey(current) !== sessionDateKey(first) ||
+        current.program_name !== first.program_name ||
+        current.location.trim().toLocaleLowerCase() !== first.location.trim().toLocaleLowerCase()
+      ) {
+        return "Choose adjacent slots from the same program, date, and location.";
+      }
+      if (Date.parse(previous.ends_at) !== Date.parse(current.starts_at)) {
+        return "Selected times must be consecutive with no gaps or overlaps.";
+      }
+    }
+    return null;
+  }, [selectedSessionIDs.length, selectedSessions]);
+
+  function toggleSessionSelection(sessionID: string) {
+    setSelectedSessionIDs((current) => {
+      if (current.includes(sessionID)) {
+        return current.filter((id) => id !== sessionID);
+      }
+      if (current.length >= 8) return current;
+      return [...current, sessionID];
+    });
+  }
 
   function moveMonth(direction: number) {
     const next = new Date(Date.UTC(month.year, month.month - 1 + direction, 1));
@@ -339,7 +404,12 @@ export default function TrainingSchedule({
           ) : (
             <div className="session-list">
               {sessions.map((session) => (
-                <SessionCard key={session.id} session={session} />
+                <SessionCard
+                  key={session.id}
+                  session={session}
+                  selected={selectedSessionIDs.includes(session.id)}
+                  onToggle={toggleSessionSelection}
+                />
               ))}
             </div>
           )
@@ -445,12 +515,52 @@ export default function TrainingSchedule({
               ) : (
                 <div className="session-list">
                   {selectedDaySessions.map((session) => (
-                    <SessionCard key={session.id} session={session} />
+                    <SessionCard
+                      key={session.id}
+                      session={session}
+                      selected={selectedSessionIDs.includes(session.id)}
+                      onToggle={toggleSessionSelection}
+                    />
                   ))}
                 </div>
               )}
             </div>
           </>
+        )}
+        {selectedSessionIDs.length > 0 && (
+          <div className={styles.bookingPanel} aria-live="polite">
+            <div>
+              <p className="section-kicker">YOUR SELECTED TIME</p>
+              <h3>
+                {selectedSessions.length} slot{selectedSessions.length === 1 ? "" : "s"} selected
+              </h3>
+              {selectedSessions.length > 0 && (
+                <p>
+                  {manilaDate.format(new Date(selectedSessions[0].starts_at))}
+                  {" · "}
+                  {manilaTime.format(new Date(selectedSessions[0].starts_at))}
+                  {" – "}
+                  {manilaTime.format(new Date(selectedSessions[selectedSessions.length - 1].ends_at))}
+                </p>
+              )}
+              {selectedSlotError && (
+                <p className={styles.selectionError} role="alert">{selectedSlotError}</p>
+              )}
+              <button
+                type="button"
+                className="admin-button secondary"
+                onClick={() => setSelectedSessionIDs([])}
+              >
+                Clear selection
+              </button>
+            </div>
+            {!selectedSlotError && selectedSessions.length > 0 && (
+              <BookingRequestForm
+                key={selectedSessions.map((session) => session.id).join(":")}
+                sessionIds={selectedSessions.map((session) => session.id)}
+              />
+            )}
+          </div>
         )}
       </section>
       <section

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -21,8 +22,16 @@ type BookingRepository struct{ db bookingDB }
 func NewBookingRepository(db bookingDB) *BookingRepository { return &BookingRepository{db: db} }
 
 func (r *BookingRepository) CreateRequest(ctx context.Context, request training.BookingRequest, tokenHash []byte) (string, error) {
+	sessionIDs := request.SessionIDs
+	if len(sessionIDs) == 0 && request.SessionID != "" {
+		sessionIDs = []string{request.SessionID}
+	}
+	encodedIDs, err := json.Marshal(sessionIDs)
+	if err != nil {
+		return "", fmt.Errorf("encode requested training sessions: %w", err)
+	}
 	var reference string
-	err := r.db.QueryRow(ctx, `SELECT public.create_public_booking_request_with_status_token($1::uuid, $2, $3, $4, $5)`, request.SessionID, request.FullName, nullable(request.Email), nullable(request.Phone), tokenHash).Scan(&reference)
+	err = r.db.QueryRow(ctx, `SELECT public.create_public_booking_request_with_slots_token($1::jsonb, $2, $3, $4, $5)`, string(encodedIDs), request.FullName, nullable(request.Email), nullable(request.Phone), tokenHash).Scan(&reference)
 	if err != nil {
 		return "", fmt.Errorf("create public booking request: %w", err)
 	}
@@ -51,7 +60,7 @@ func (r *BookingRepository) GetPublicStatus(ctx context.Context, tokenHash []byt
 }
 
 func (r *BookingRepository) ListPendingRequests(ctx context.Context) ([]training.BookingRequestRecord, error) {
-	rows, err := r.db.Query(ctx, `SELECT id, session_id, full_name, email, phone, status, created_at, starts_at, location, session_status FROM public.list_pending_booking_requests()`)
+	rows, err := r.db.Query(ctx, `SELECT id, session_id, full_name, email, phone, status, created_at, starts_at, ends_at, location, session_status FROM public.list_pending_booking_requests_with_slots()`)
 	if err != nil {
 		return nil, fmt.Errorf("list pending booking requests: %w", err)
 	}
@@ -59,7 +68,7 @@ func (r *BookingRepository) ListPendingRequests(ctx context.Context) ([]training
 	result := make([]training.BookingRequestRecord, 0)
 	for rows.Next() {
 		var row training.BookingRequestRecord
-		if err := rows.Scan(&row.ID, &row.SessionID, &row.FullName, &row.Email, &row.Phone, &row.Status, &row.CreatedAt, &row.StartsAt, &row.Location, &row.SessionStatus); err != nil {
+		if err := rows.Scan(&row.ID, &row.SessionID, &row.FullName, &row.Email, &row.Phone, &row.Status, &row.CreatedAt, &row.StartsAt, &row.EndsAt, &row.Location, &row.SessionStatus); err != nil {
 			return nil, fmt.Errorf("scan pending booking request: %w", err)
 		}
 		result = append(result, row)
@@ -326,6 +335,35 @@ func (r *BookingRepository) CreateTrainingSession(ctx context.Context, programID
 		return "", fmt.Errorf("create training session: %w", err)
 	}
 	return id, nil
+}
+
+func (r *BookingRepository) CreateTrainingSessions(ctx context.Context, sessions []training.TrainingSessionCreateInput) ([]string, error) {
+	payload, err := json.Marshal(sessions)
+	if err != nil {
+		return nil, fmt.Errorf("encode training sessions batch: %w", err)
+	}
+	var encodedIDs []byte
+	if err := r.db.QueryRow(ctx, `SELECT public.admin_create_training_sessions_batch($1::jsonb)`, string(payload)).Scan(&encodedIDs); err != nil {
+		return nil, fmt.Errorf("create training sessions batch: %w", err)
+	}
+	var ids []string
+	if err := json.Unmarshal(encodedIDs, &ids); err != nil {
+		return nil, fmt.Errorf("decode created training session IDs: %w", err)
+	}
+	return ids, nil
+}
+
+func (r *BookingRepository) EditTrainingSession(ctx context.Context, sessionID string, input training.TrainingSessionEditInput) error {
+	var updated bool
+	err := r.db.QueryRow(ctx, `SELECT public.admin_edit_training_session($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9)`,
+		sessionID, input.ProgramID, input.StartsAt, input.EndsAt, input.Location, input.Capacity, nullable(input.Notes), input.IsPublic, input.AcknowledgeBookedChanges).Scan(&updated)
+	if err != nil {
+		return fmt.Errorf("edit training session: %w", err)
+	}
+	if !updated {
+		return errors.New("training session was not updated")
+	}
+	return nil
 }
 
 func (r *BookingRepository) UpdateTrainingSession(ctx context.Context, sessionID string, status *string, notes *string, isPublic *bool) error {

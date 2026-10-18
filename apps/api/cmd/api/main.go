@@ -135,6 +135,8 @@ func newAPIHandler(cfg config.Config, trainingService *training.Service, booking
 	mux.Handle("GET /api/admin/training-programs", protectAdmin(handlers.AdminListTrainingPrograms(adminBookingRepository, logger)))
 	mux.Handle("GET /api/admin/training-sessions", protectAdmin(handlers.AdminListTrainingSessions(adminBookingRepository, logger)))
 	mux.Handle("POST /api/admin/training-sessions", protectAdmin(handlers.AdminCreateTrainingSession(adminBookingRepository, logger)))
+	mux.Handle("POST /api/admin/training-sessions/batch", protectAdmin(handlers.AdminCreateTrainingSessionsBatch(adminBookingRepository, logger)))
+	mux.Handle("PUT /api/admin/training-sessions/{id}", protectAdmin(handlers.AdminEditTrainingSession(adminBookingRepository, logger)))
 	mux.Handle("PATCH /api/admin/training-sessions/{id}", protectAdmin(handlers.AdminUpdateTrainingSession(adminBookingRepository, logger)))
 	mux.Handle("PATCH /api/admin/training-sessions/{id}/coach", protectAdmin(handlers.AdminAssignTrainingSessionCoach(adminBookingRepository, logger)))
 

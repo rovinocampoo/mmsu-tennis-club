@@ -99,6 +99,8 @@ func TestAllAdminRoutesRejectMissingAuthorization(t *testing.T) {
 		{http.MethodGet, "/api/admin/training-programs", ""},
 		{http.MethodGet, "/api/admin/training-sessions", ""},
 		{http.MethodPost, "/api/admin/training-sessions", `{}`},
+		{http.MethodPost, "/api/admin/training-sessions/batch", `{"sessions":[]}`},
+		{http.MethodPut, "/api/admin/training-sessions/11111111-1111-4111-8111-111111111111", `{}`},
 		{http.MethodPatch, "/api/admin/training-sessions/11111111-1111-4111-8111-111111111111", `{}`},
 		{http.MethodPatch, "/api/admin/training-sessions/11111111-1111-4111-8111-111111111111/coach", `{"coach_id":null}`},
 	} {

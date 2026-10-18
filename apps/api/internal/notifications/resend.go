@@ -21,6 +21,41 @@ type ResendSender struct {
 	client   *http.Client
 }
 
+// resendRejectionError records only safe, structured details from Resend's
+// HTTP rejection. The provider's free-form message is intentionally not kept
+// because it can contain recipient or request data.
+type resendRejectionError struct {
+	statusCode int
+	name       string
+}
+
+func (e *resendRejectionError) Error() string {
+	if e.name == "" {
+		return fmt.Sprintf("Resend rejected the request (HTTP %d)", e.statusCode)
+	}
+	return fmt.Sprintf("Resend rejected the request (HTTP %d, provider error %s)", e.statusCode, e.name)
+}
+
+type resendInvalidResponseError struct{}
+
+func (*resendInvalidResponseError) Error() string {
+	return "Resend returned an invalid response"
+}
+
+// safeResendErrorName permits only short identifier-like error names for logs.
+func safeResendErrorName(name string) string {
+	name = strings.TrimSpace(strings.ToLower(name))
+	if name == "" || len(name) > 80 {
+		return ""
+	}
+	for _, r := range name {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '_' && r != '-' {
+			return ""
+		}
+	}
+	return name
+}
+
 func NewResendSender(apiKey, fromEmail string) *ResendSender {
 	apiKey = strings.TrimSpace(apiKey)
 	fromEmail = strings.TrimSpace(fromEmail)
@@ -64,14 +99,22 @@ func (s *ResendSender) Send(ctx context.Context, email Email, idempotencyKey str
 	}
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
-		return "", errors.New("Resend rejected the request")
+		var providerError struct {
+			Name string `json:"name"`
+		}
+		// Parse only a small, bounded response. Never log the free-form message,
+		// response body, recipient address, or authorization header.
+		_ = json.NewDecoder(io.LimitReader(response.Body, 4096)).Decode(&providerError)
+		return "", &resendRejectionError{
+			statusCode: response.StatusCode,
+			name:       safeResendErrorName(providerError.Name),
+		}
 	}
 	var result struct {
 		ID string `json:"id"`
 	}
 	if err := json.NewDecoder(io.LimitReader(response.Body, 16*1024)).Decode(&result); err != nil || strings.TrimSpace(result.ID) == "" {
-		return "", errors.New("Resend returned an invalid response")
+		return "", &resendInvalidResponseError{}
 	}
 	return result.ID, nil
 }

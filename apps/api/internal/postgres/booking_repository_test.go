@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
@@ -53,6 +54,12 @@ func (r queryRowFixture) Scan(dest ...any) error {
 			return errors.New("unexpected row value type")
 		}
 		*target = value
+	case *[]byte:
+		value, ok := r.value.([]byte)
+		if !ok {
+			return errors.New("unexpected row value type")
+		}
+		*target = append([]byte(nil), value...)
 	default:
 		return errors.New("unexpected scan destination")
 	}
@@ -144,7 +151,42 @@ func TestBookingRepositoryCreatesPendingRequestFunction(t *testing.T) {
 	if err != nil || id != "request-id" {
 		t.Fatalf("id=%q err=%v", id, err)
 	}
-	if !strings.Contains(db.query, "create_public_booking_request_with_status_token") || !reflect.DeepEqual(db.args, []any{"session-id", "Alex Player", (*string)(ptr("alex@example.com")), (*string)(nil), hash}) {
+	if !strings.Contains(db.query, "create_public_booking_request_with_slots_token") || !reflect.DeepEqual(db.args, []any{`["session-id"]`, "Alex Player", (*string)(ptr("alex@example.com")), (*string)(nil), hash}) {
+		t.Fatalf("query=%q args=%#v", db.query, db.args)
+	}
+}
+
+func TestBookingRepositoryCreatesSessionBatchInOneFunctionCall(t *testing.T) {
+	db := &queryRowStub{value: []byte(`["session-1","session-2"]`)}
+	start := time.Date(2026, 10, 20, 8, 0, 0, 0, time.UTC)
+	ids, err := NewBookingRepository(db).CreateTrainingSessions(context.Background(), []training.TrainingSessionCreateInput{
+		{ProgramID: "program-1", StartsAt: start, EndsAt: start.Add(time.Hour), Location: "Court 1", IsPublic: true},
+		{ProgramID: "program-1", StartsAt: start.Add(time.Hour), EndsAt: start.Add(2 * time.Hour), Location: "Court 1", IsPublic: true},
+	})
+	if err != nil || !reflect.DeepEqual(ids, []string{"session-1", "session-2"}) {
+		t.Fatalf("ids=%#v err=%v", ids, err)
+	}
+	if !strings.Contains(db.query, "admin_create_training_sessions_batch") || !strings.Contains(db.query, "$1::jsonb") || len(db.args) != 1 {
+		t.Fatalf("query=%q args=%#v", db.query, db.args)
+	}
+	var payload []training.TrainingSessionCreateInput
+	if err := json.Unmarshal([]byte(db.args[0].(string)), &payload); err != nil || len(payload) != 2 {
+		t.Fatalf("payload=%#v err=%v", payload, err)
+	}
+}
+
+func TestBookingRepositoryEditsFullSessionWithAcknowledgement(t *testing.T) {
+	db := &queryRowStub{value: true}
+	start := time.Date(2026, 10, 21, 8, 0, 0, 0, time.UTC)
+	capacity := 6
+	err := NewBookingRepository(db).EditTrainingSession(context.Background(), "session-id", training.TrainingSessionEditInput{
+		ProgramID: "program-id", StartsAt: start, EndsAt: start.Add(2 * time.Hour), Location: "Court 2",
+		Capacity: &capacity, Notes: "updated", IsPublic: true, AcknowledgeBookedChanges: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(db.query, "admin_edit_training_session") || len(db.args) != 9 || db.args[0] != "session-id" || db.args[1] != "program-id" || db.args[8] != true {
 		t.Fatalf("query=%q args=%#v", db.query, db.args)
 	}
 }

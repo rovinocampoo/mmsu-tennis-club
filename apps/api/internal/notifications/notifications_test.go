@@ -1,9 +1,12 @@
 package notifications
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -117,7 +120,10 @@ func TestResendSenderUsesStableIdempotencyKeyAndParsesAcceptedID(t *testing.T) {
 
 func TestResendSenderRejectsProviderFailureWithoutLeakingResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		http.Error(w, "secret provider details", http.StatusBadRequest)
+		header := w.Header()
+		header.Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"name":"validation_error","message":"secret provider details"}`)
 	}))
 	defer server.Close()
 	sender := NewResendSender("test-key", "club@example.test")
@@ -125,6 +131,53 @@ func TestResendSenderRejectsProviderFailureWithoutLeakingResponse(t *testing.T) 
 	_, err := sender.Send(context.Background(), Email{}, "stable-key")
 	if err == nil || strings.Contains(err.Error(), "secret provider details") || strings.Contains(err.Error(), "test-key") {
 		t.Fatalf("unexpected provider error content: %v", err)
+	}
+	if !strings.Contains(err.Error(), "HTTP 400") || !strings.Contains(err.Error(), "validation_error") {
+		t.Fatalf("provider status/category missing from safe error: %v", err)
+	}
+}
+
+func TestResendSenderCategorizesMalformedSuccessResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"message":"missing id"}`)
+	}))
+	defer server.Close()
+	sender := NewResendSender("test-key", "club@example.test")
+	sender.endpointForTest(server.URL, server.Client())
+	_, err := sender.Send(context.Background(), Email{}, "stable-key")
+	var invalidResponse *resendInvalidResponseError
+	if !errors.As(err, &invalidResponse) {
+		t.Fatalf("error=%v, want typed invalid-response error", err)
+	}
+}
+
+func TestProviderRejectionLogsStatusAndCategoryWithoutProviderMessage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, `{"name":"restricted_api_key","message":"do-not-log-this-message"}`)
+	}))
+	defer server.Close()
+
+	repo := &notificationRepoStub{
+		claim:    Claim{Status: StatusSending, Claimed: true, AttemptCount: 1, RecipientEmail: "person@example.test", ProgramName: "Program", StartsAt: time.Now(), EndsAt: time.Now().Add(time.Hour), Location: "Court", SupportReference: "MMSU-REF"},
+		complete: true,
+	}
+	sender := NewResendSender("test-key", "club@example.test")
+	sender.endpointForTest(server.URL, server.Client())
+	var logs bytes.Buffer
+	service := NewService(repo, sender, "club@example.test", log.New(&logs, "", 0))
+	result := service.NotifyApproved(context.Background(), "request-id")
+	if result.Status != StatusFailed || !result.Retryable {
+		t.Fatalf("result=%#v, want retryable failed notification", result)
+	}
+	got := logs.String()
+	if !strings.Contains(got, "http_status=403") || !strings.Contains(got, "provider_error=restricted_api_key") {
+		t.Fatalf("safe provider diagnostics missing from log: %q", got)
+	}
+	if strings.Contains(got, "do-not-log-this-message") || strings.Contains(got, "test-key") || strings.Contains(got, "person@example.test") {
+		t.Fatalf("log contains sensitive provider/request details: %q", got)
 	}
 }
 
