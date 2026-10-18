@@ -18,6 +18,7 @@ test("allows coach availability and admin scheduling API methods", () => {
     ["PUT", ["admin", "training-sessions", sessionId]],
     ["PATCH", ["admin", "training-sessions", sessionId]],
     ["PATCH", ["admin", "training-sessions", sessionId, "coach"]],
+    ["POST", ["admin", "booking-requests", sessionId, "calendar", "retry"]],
   ]) {
     assert.equal(isBackendRouteAllowed(method, path), true, `${method} /${path.join("/")}`);
   }
@@ -31,5 +32,7 @@ test("keeps the backend proxy method and identifier allowlist narrow", () => {
   assert.equal(isBackendRouteAllowed("PATCH", ["admin", "training-sessions", "not-a-uuid"]), false);
   assert.equal(isBackendRouteAllowed("PATCH", ["admin", "training-sessions", "not-a-uuid", "coach"]), false);
   assert.equal(isBackendRouteAllowed("GET", ["admin", "unknown"]), false);
+  assert.equal(isBackendRouteAllowed("POST", ["admin", "booking-requests", "not-a-uuid", "calendar", "retry"]), false);
+  assert.equal(isBackendRouteAllowed("POST", ["admin", "booking-requests", sessionId, "calendar", "unknown"]), false);
   assert.equal(isBackendRouteAllowed("GET", ["coach", "availability", sessionId]), false);
 });

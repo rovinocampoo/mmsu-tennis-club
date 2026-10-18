@@ -44,6 +44,7 @@ type ApprovalNotification = {
   notification_message: string;
   notification_retryable: boolean;
 };
+type CalendarSync = { requestId: string; status: "synced" | "failed" | "not_configured"; message: string; retryable: boolean };
 
 const supabase = getSupabaseBrowserClient();
 const expiredSessionMessage =
@@ -94,6 +95,8 @@ export default function AdminPage() {
   const [approvalNotification, setApprovalNotification] =
     useState<ApprovalNotification | null>(null);
   const [notificationBusy, setNotificationBusy] = useState(false);
+  const [calendarSync, setCalendarSync] = useState<CalendarSync | null>(null);
+  const [calendarSyncBusy, setCalendarSyncBusy] = useState(false);
   const [bookingConfirmation, setBookingConfirmation] = useState<{
     requestId: string;
     message: string;
@@ -358,6 +361,7 @@ export default function AdminPage() {
       );
       if (action === "approve") {
         setApprovalNotification({ requestId: id, ...data });
+        setCalendarSync({ requestId: id, ...(data.calendar_sync || { status: "not_configured", message: "Google Calendar sync status was not returned.", retryable: false }) });
         setNotice("Booking approved and confirmed.");
         setBookingConfirmation(
           requestToApprove && requestToApprove.ends_at
@@ -383,6 +387,7 @@ export default function AdminPage() {
         setBookingConfirmationCopyNotice("");
       } else {
         setApprovalNotification(null);
+        setCalendarSync(null);
         setBookingConfirmation(null);
         setBookingConfirmationCopyNotice("");
         setNotice("Request rejected. No approval email was sent.");
@@ -433,6 +438,19 @@ export default function AdminPage() {
     setBookingConfirmationCopyNotice(copied
       ? "Confirmation copied. Paste it into Messenger or SMS."
       : "Your browser blocked copying. Select the message below and copy it manually.");
+  }
+
+  async function retryCalendarSync() {
+    if (sessionState.status !== "authenticated" || !calendarSync) return;
+    setCalendarSyncBusy(true);
+    try {
+      const response = await adminFetch(`/api/backend/admin/booking-requests/${calendarSync.requestId}/calendar/retry`, { method: "POST" });
+      const data = await readAdminResponse(response, "The calendar sync could not be retried.");
+      setCalendarSync({ requestId: calendarSync.requestId, ...data });
+    } catch (cause) {
+      setCalendarSync((current) => current ? { ...current, status: "failed", message: "The calendar sync retry could not be completed. Try again shortly.", retryable: true } : current);
+      handleAdminError(cause);
+    } finally { setCalendarSyncBusy(false); }
   }
 
   async function retryApprovalNotification() {
@@ -735,8 +753,14 @@ export default function AdminPage() {
                     </div>
                   </section>
                 )}
+                {calendarSync && (
+                  <section className={`admin-state ${calendarSync.status === "failed" ? "form-error" : calendarSync.status === "synced" ? "form-success" : ""}`} role="status" aria-live="polite">
+                    <strong>Google Calendar: {calendarSync.status === "synced" ? "event synced" : calendarSync.status === "not_configured" ? "not configured" : "sync failed"}.</strong>
+                    <p>{calendarSync.message}</p>
+                    {calendarSync.retryable && <button className="admin-button secondary" type="button" disabled={calendarSyncBusy || busy} onClick={() => void retryCalendarSync()}>{calendarSyncBusy ? "Retrying calendar sync…" : "Retry Google Calendar sync"}</button>}
+                  </section>
+                )}
                 {approvalNotification && (
-                  <section
                     className={`admin-state ${approvalNotification.notification_status === "failed" ? "form-error" : "form-success"}`}
                     role="status"
                   >
