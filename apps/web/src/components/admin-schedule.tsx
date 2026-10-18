@@ -1930,10 +1930,10 @@ export default function AdminSchedule({
 
                   {selectedSessions.map((session) => (
                     <article
-                      className="availability-card agenda-card"
+                      className="availability-card agenda-card session-agenda-card"
                       key={session.id}
                     >
-                      <div>
+                      <div className="session-agenda-details">
                         <strong>{session.program_name}</strong>
                         <p>
                           {sessionDateTime.format(new Date(session.starts_at))}{" "}
@@ -1954,66 +1954,68 @@ export default function AdminSchedule({
                         </small>
                       </div>
 
-                      <button
-                        className="admin-button secondary"
-                        type="button"
-                        disabled={busy}
-                        onClick={() => beginEdit(session)}
-                      >
-                        Edit session
-                      </button>
+                      <div className="session-agenda-actions">
+                        <button
+                          className="admin-button secondary"
+                          type="button"
+                          disabled={busy}
+                          onClick={() => beginEdit(session)}
+                        >
+                          Edit session
+                        </button>
 
-                      {session.status !== "cancelled" && (
+                        {session.status !== "cancelled" && (
+                          <button
+                            className="admin-button secondary"
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              void updateSession(session.id, {
+                                status:
+                                  session.status === "open" ? "closed" : "open",
+                              })
+                            }
+                          >
+                            {session.status === "open"
+                              ? "Close booking"
+                              : "Reopen booking"}
+                          </button>
+                        )}
+
                         <button
                           className="admin-button secondary"
                           type="button"
                           disabled={busy}
                           onClick={() =>
                             void updateSession(session.id, {
-                              status:
-                                session.status === "open" ? "closed" : "open",
+                              is_public: !session.is_public,
                             })
                           }
                         >
-                          {session.status === "open"
-                            ? "Close booking"
-                            : "Reopen booking"}
+                          {session.is_public ? "Unpublish" : "Publish"}
                         </button>
-                      )}
 
-                      <button
-                        className="admin-button secondary"
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          void updateSession(session.id, {
-                            is_public: !session.is_public,
-                          })
-                        }
-                      >
-                        {session.is_public ? "Unpublish" : "Publish"}
-                      </button>
-
-                      {session.status !== "cancelled" && (
-                        <button
-                          className="admin-button danger"
-                          type="button"
-                          disabled={busy}
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `Cancel ${session.program_name}? It will no longer accept booking requests.`,
-                              )
-                            ) {
-                              void updateSession(session.id, {
-                                status: "cancelled",
-                              });
-                            }
-                          }}
-                        >
-                          Cancel session
-                        </button>
-                      )}
+                        {session.status !== "cancelled" && (
+                          <button
+                            className="admin-button danger"
+                            type="button"
+                            disabled={busy}
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  `Cancel ${session.program_name}? It will no longer accept booking requests.`,
+                                )
+                              ) {
+                                void updateSession(session.id, {
+                                  status: "cancelled",
+                                });
+                              }
+                            }}
+                          >
+                            Cancel session
+                          </button>
+                        )}
+                      </div>
                     </article>
                   ))}
 
