@@ -2082,3 +2082,6 @@ button.calendar-day.outside-month { background: #f6f8f5; }
     left: calc(100% - 14px);
   }
 }
+.admin-calendar-actions { margin-top: 4px; }
+.booking-timetree-link { color: var(--green); font-size: .8rem; font-weight: 700; text-underline-offset: 3px; }
+.booking-timetree-link:focus-visible { outline: 3px solid #9ab738; outline-offset: 3px; }

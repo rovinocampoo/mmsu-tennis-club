@@ -61,3 +61,10 @@ test("calendar actions require approval and filenames are sanitized", () => {
   assert.throws(() => createCalendarFile({ ...approved, status: "pending" }), /Only approved/);
   assert.equal(getCalendarFilename("MMSU/26 104"), "mmsu-tennis-booking-MMSU-26-104.ics");
 });
+
+test("admin confirmation message tells requester to visit status page instead of exposing long calendar URL", () => {
+  const message = createAdminApprovalMessage({ full_name: "Player Example", starts_at: approved.starts_at, ends_at: approved.ends_at, location: approved.location });
+  assert.match(message, /Visit your private booking status page to add this booking to your calendar/);
+  assert.doesNotMatch(message, /https:\/\/calendar\.google\.com/);
+  assert.doesNotMatch(message, /https:\/\/mmsu-tennis-club\.vercel\.app\/booking-status/);
+});

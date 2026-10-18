@@ -18,7 +18,7 @@ import {
   initialAdminSessionState,
 } from "@/lib/admin-session-state.mjs";
 import AdminSchedule from "@/components/admin-schedule";
-import { createAdminApprovalMessage } from "@/lib/booking-confirmation.mjs";
+import { createAdminApprovalMessage, createCalendarFile, createGoogleCalendarURL, getCalendarFilename } from "@/lib/booking-confirmation.mjs";
 
 type RequestRow = {
   id: string;
@@ -94,7 +94,18 @@ export default function AdminPage() {
   const [approvalNotification, setApprovalNotification] =
     useState<ApprovalNotification | null>(null);
   const [notificationBusy, setNotificationBusy] = useState(false);
-  const [bookingConfirmation, setBookingConfirmation] = useState<{ requestId: string; message: string } | null>(null);
+  const [bookingConfirmation, setBookingConfirmation] = useState<{
+    requestId: string;
+    message: string;
+    calendar: {
+      request_reference: string;
+      status: "approved";
+      program_name: string;
+      starts_at: string;
+      ends_at: string;
+      location: string;
+    };
+  } | null>(null);
   const [bookingConfirmationCopyNotice, setBookingConfirmationCopyNotice] = useState("");
   const requestLoadInFlight = useRef(false);
 
@@ -358,6 +369,14 @@ export default function AdminPage() {
                   ends_at: requestToApprove.ends_at,
                   location: requestToApprove.location,
                 }),
+                calendar: {
+                  request_reference: requestToApprove.id,
+                  status: "approved",
+                  program_name: "Tennis training",
+                  starts_at: requestToApprove.starts_at,
+                  ends_at: requestToApprove.ends_at,
+                  location: requestToApprove.location,
+                },
               }
             : null,
         );
@@ -374,6 +393,21 @@ export default function AdminPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function downloadBookingCalendar() {
+    if (!bookingConfirmation) return;
+    const blob = new Blob([createCalendarFile(bookingConfirmation.calendar)], {
+      type: "text/calendar;charset=utf-8",
+    });
+    const objectURL = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectURL;
+    link.download = getCalendarFilename(bookingConfirmation.calendar.request_reference);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectURL), 1000);
   }
 
   async function copyBookingConfirmation() {
@@ -674,6 +708,31 @@ export default function AdminPage() {
                       </button>
                     </div>
                     {bookingConfirmationCopyNotice && <p className="admin-help" role="status" aria-live="polite">{bookingConfirmationCopyNotice}</p>}
+                    <div className="booking-calendar-actions admin-calendar-actions">
+                      <p className="booking-actions-title">Add this confirmed booking to a calendar</p>
+                      <a
+                        className="request-submit booking-calendar-link"
+                        href={createGoogleCalendarURL(bookingConfirmation.calendar)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <span aria-hidden="true">▦</span> Add to Google Calendar
+                      </a>
+                      <button className="request-copy" type="button" onClick={downloadBookingCalendar}>
+                        Download calendar file (.ics)
+                      </button>
+                      <p className="request-note">
+                        <strong>Using TimeTree?</strong> Download the .ics file, add it to your phone&apos;s calendar, then import it into your shared TimeTree calendar. Imported events do not automatically sync later booking changes.
+                      </p>
+                      <a
+                        className="booking-timetree-link"
+                        href="https://support.timetreeapp.com/hc/en-us/articles/360000639742-I-want-to-share-another-calendar-such-as-Google-Calendar"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        View TimeTree import instructions
+                      </a>
+                    </div>
                   </section>
                 )}
                 {approvalNotification && (
