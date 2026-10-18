@@ -761,6 +761,7 @@ export default function AdminPage() {
                   </section>
                 )}
                 {approvalNotification && (
+                  <section
                     className={`admin-state ${approvalNotification.notification_status === "failed" ? "form-error" : "form-success"}`}
                     role="status"
                   >
