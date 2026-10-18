@@ -73,6 +73,16 @@ type PublicBookingStatus struct {
 	Location         string
 }
 
+type CalendarEvent struct {
+	RequestID string
+	RequestReference string
+	ParticipantName string
+	ProgramName string
+	StartsAt time.Time
+	EndsAt time.Time
+	Location string
+}
+
 type BookingRequestRecord struct {
 	ID            string    `json:"id"`
 	SessionID     string    `json:"session_id"`

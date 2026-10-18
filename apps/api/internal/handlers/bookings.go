@@ -255,7 +255,18 @@ type approveRequestInput struct {
 	CreateNew bool   `json:"create_new"`
 }
 
-func AdminApproveBookingRequest(repo training.BookingRepository, logger interface{ Printf(string, ...any) }, notifiers ...notifications.ApprovalNotifier) http.HandlerFunc {
+type CalendarSyncer interface { IsConfigured() bool; Sync(context.Context, training.CalendarEvent) error }
+type calendarEventRepository interface { GetBookingCalendarEvent(context.Context, string) (training.CalendarEvent, error) }
+type calendarSyncOutcome struct { Status string `json:"status"`; Message string `json:"message"`; Retryable bool `json:"retryable"` }
+func syncCalendar(ctx context.Context, repo training.BookingRepository, syncer CalendarSyncer, id string, logger interface{ Printf(string, ...any) }) calendarSyncOutcome {
+	if syncer == nil || !syncer.IsConfigured() { return calendarSyncOutcome{"not_configured", "Google Calendar is not configured; the booking is still approved.", false} }
+	r, ok := repo.(calendarEventRepository); if !ok { return calendarSyncOutcome{"failed", "Calendar booking details could not be loaded. Retry the sync.", true} }
+	e, err := r.GetBookingCalendarEvent(ctx, id); if err == nil { err = syncer.Sync(ctx, e) }
+	if err != nil { if logger != nil { logger.Printf("Google Calendar sync failed for booking request %s: %v", id, err) }; return calendarSyncOutcome{"failed", "Booking approved, but Google Calendar sync failed. You can retry.", true} }
+	return calendarSyncOutcome{"synced", "Booking successfully added to Google Calendar.", false}
+}
+func AdminApproveBookingRequest(repo training.BookingRepository, logger interface{ Printf(string, ...any) }, notifiers ...notifications.ApprovalNotifier) http.HandlerFunc { return AdminApproveBookingRequestWithCalendar(repo, logger, nil, notifiers...) }
+func AdminApproveBookingRequestWithCalendar(repo training.BookingRepository, logger interface{ Printf(string, ...any) }, syncer CalendarSyncer, notifiers ...notifications.ApprovalNotifier) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if repo == nil {
 			writeBookingError(w, http.StatusServiceUnavailable, "booking requests are temporarily unavailable")
@@ -286,6 +297,9 @@ func AdminApproveBookingRequest(repo training.BookingRepository, logger interfac
 			writeBookingRepoError(w, logger, "approve booking request", err)
 			return
 		}
+		calendarCtx, calendarCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 12*time.Second)
+		calendarResult := syncCalendar(calendarCtx, repo, syncer, requestID, logger)
+		calendarCancel()
 		result := notifications.Result{
 			Status:    notifications.StatusNotConfigured,
 			Message:   "Approval was saved, but Resend is unavailable. Please contact the requester manually.",
@@ -298,9 +312,18 @@ func AdminApproveBookingRequest(repo training.BookingRepository, logger interfac
 		}
 		writeJSON(w, http.StatusOK, struct {
 			Status string `json:"status"`
+			CalendarSync calendarSyncOutcome `json:"calendar_sync"`
 			notifications.Result
-		}{Status: "approved", Result: result})
+		}{Status: "approved", CalendarSync: calendarResult, Result: result})
 	}
+}
+
+func AdminRetryBookingCalendarSync(repo training.BookingRepository, syncer CalendarSyncer, logger interface{ Printf(string, ...any) }) http.HandlerFunc {
+ return func(w http.ResponseWriter, r *http.Request) {
+  id := strings.ToLower(r.PathValue("id")); if !validUUID(id) { writeBookingError(w, http.StatusBadRequest, "request id is invalid"); return }
+  ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 12*time.Second); defer cancel()
+  writeJSON(w, http.StatusOK, syncCalendar(ctx, repo, syncer, id, logger))
+ }
 }
 
 func AdminRetryBookingApprovalNotification(notifier notifications.ApprovalNotifier, logger interface{ Printf(string, ...any) }) http.HandlerFunc {

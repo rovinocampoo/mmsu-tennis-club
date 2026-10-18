@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rovinocampoo/mmsu-tennis-club/apps/api/internal/adminauth"
 	"github.com/rovinocampoo/mmsu-tennis-club/apps/api/internal/config"
+	"github.com/rovinocampoo/mmsu-tennis-club/apps/api/internal/googlecalendar"
 	"github.com/rovinocampoo/mmsu-tennis-club/apps/api/internal/handlers"
 	"github.com/rovinocampoo/mmsu-tennis-club/apps/api/internal/notifications"
 	"github.com/rovinocampoo/mmsu-tennis-club/apps/api/internal/postgres"
@@ -73,11 +74,12 @@ func main() {
 		)
 	}
 
+	calendarSyncer := googlecalendar.New(cfg.GoogleServiceAccountFile, cfg.GoogleCalendarID)
 	trainingService := training.NewService(repository)
 	listenAddr := net.JoinHostPort(cfg.APIHost, cfg.Port)
 	server := &http.Server{
 		Addr:              listenAddr,
-		Handler:           newAPIHandler(cfg, trainingService, bookingRepository, adminBookingRepository, log.Default(), approvalNotifier),
+		Handler:           newAPIHandlerWithCalendar(cfg, trainingService, bookingRepository, adminBookingRepository, log.Default(), approvalNotifier, calendarSyncer),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		IdleTimeout:       60 * time.Second,
@@ -91,6 +93,10 @@ func main() {
 }
 
 func newAPIHandler(cfg config.Config, trainingService *training.Service, bookingRepository, adminBookingRepository training.BookingRepository, logger *log.Logger, notifiers ...notifications.ApprovalNotifier) http.Handler {
+ var notifier notifications.ApprovalNotifier; if len(notifiers)>0 { notifier=notifiers[0] }
+ return newAPIHandlerWithCalendar(cfg, trainingService, bookingRepository, adminBookingRepository, logger, notifier, nil)
+}
+func newAPIHandlerWithCalendar(cfg config.Config, trainingService *training.Service, bookingRepository, adminBookingRepository training.BookingRepository, logger *log.Logger, approvalNotifier notifications.ApprovalNotifier, calendarSyncer *googlecalendar.Client) http.Handler {
 	if logger == nil {
 		logger = log.Default()
 	}
@@ -122,10 +128,7 @@ func newAPIHandler(cfg config.Config, trainingService *training.Service, booking
 	protectCoach := func(handler http.Handler) http.Handler {
 		return adminauth.Protect(handler, authValidator, cfg.CoachUserIDs)
 	}
-	var approvalNotifier notifications.ApprovalNotifier
-	if len(notifiers) > 0 {
-		approvalNotifier = notifiers[0]
-	}
+
 	mux.Handle("GET /api/coach/availability", protectCoach(handlers.CoachListAvailability(bookingRepository, logger)))
 	mux.Handle("POST /api/coach/availability", protectCoach(handlers.CoachSubmitAvailability(bookingRepository, logger)))
 	mux.Handle("DELETE /api/coach/availability/{id}", protectCoach(handlers.CoachDeleteAvailability(bookingRepository, logger)))
@@ -143,7 +146,8 @@ func newAPIHandler(cfg config.Config, trainingService *training.Service, booking
 	mux.Handle("GET /api/admin/booking-requests", protectAdmin(handlers.AdminBookingRequests(adminBookingRepository, logger)))
 	mux.Handle("GET /api/admin/approved-clients", protectAdmin(handlers.AdminApprovedClients(adminBookingRepository, logger)))
 	mux.Handle("GET /api/admin/players", protectAdmin(handlers.AdminPlayerSearch(adminBookingRepository, logger)))
-	mux.Handle("POST /api/admin/booking-requests/{id}/approve", protectAdmin(handlers.AdminApproveBookingRequest(adminBookingRepository, logger, approvalNotifier)))
+	mux.Handle("POST /api/admin/booking-requests/{id}/approve", protectAdmin(handlers.AdminApproveBookingRequestWithCalendar(adminBookingRepository, logger, calendarSyncer, approvalNotifier)))
+	mux.Handle("POST /api/admin/booking-requests/{id}/calendar/retry", protectAdmin(handlers.AdminRetryBookingCalendarSync(adminBookingRepository, calendarSyncer, logger)))
 	mux.Handle("POST /api/admin/booking-requests/{id}/reject", protectAdmin(handlers.AdminRejectBookingRequest(adminBookingRepository, logger)))
 	mux.Handle("POST /api/admin/booking-requests/{id}/notification/retry", protectAdmin(handlers.AdminRetryBookingApprovalNotification(approvalNotifier, logger)))
 	return mux

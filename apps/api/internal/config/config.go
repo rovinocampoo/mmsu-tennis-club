@@ -18,8 +18,10 @@ type Config struct {
 	AdminUserIDs           map[string]struct{}
 	CoachUserIDs           map[string]struct{}
 	APIProxySharedSecret   string
-	ResendAPIKey           string
-	ResendFromEmail        string
+	ResendAPIKey             string
+	ResendFromEmail          string
+	GoogleServiceAccountFile string
+	GoogleCalendarID         string
 }
 
 // Load reads configuration from the process environment.
@@ -42,8 +44,13 @@ func Load() (Config, error) {
 		SupabaseURL:            strings.TrimRight(strings.TrimSpace(os.Getenv("SUPABASE_URL")), "/"),
 		SupabasePublishableKey: strings.TrimSpace(os.Getenv("SUPABASE_PUBLISHABLE_KEY")),
 		APIProxySharedSecret:   strings.TrimSpace(os.Getenv("API_PROXY_SHARED_SECRET")),
-		ResendAPIKey:           strings.TrimSpace(os.Getenv("RESEND_API_KEY")),
-		ResendFromEmail:        strings.TrimSpace(os.Getenv("RESEND_FROM_EMAIL")),
+		ResendAPIKey:             strings.TrimSpace(os.Getenv("RESEND_API_KEY")),
+		ResendFromEmail:          strings.TrimSpace(os.Getenv("RESEND_FROM_EMAIL")),
+		GoogleServiceAccountFile: strings.TrimSpace(os.Getenv("GOOGLE_SERVICE_ACCOUNT_FILE")),
+		GoogleCalendarID:         strings.TrimSpace(os.Getenv("GOOGLE_CALENDAR_ID")),
+	}
+	if (cfg.GoogleServiceAccountFile == "") != (cfg.GoogleCalendarID == "") {
+		return Config{}, fmt.Errorf("GOOGLE_SERVICE_ACCOUNT_FILE and GOOGLE_CALENDAR_ID must either both be configured or both be empty")
 	}
 	if cfg.APIProxySharedSecret != "" && len(cfg.APIProxySharedSecret) < 32 {
 		return Config{}, fmt.Errorf("API_PROXY_SHARED_SECRET must contain at least 32 characters")

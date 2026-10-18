@@ -108,6 +108,13 @@ func (r *BookingRepository) ApproveRequest(ctx context.Context, requestID, admin
 	return bookingID, nil
 }
 
+func (r *BookingRepository) GetBookingCalendarEvent(ctx context.Context, requestID string) (training.CalendarEvent, error) {
+	var e training.CalendarEvent
+	err := r.db.QueryRow(ctx, `SELECT request_id::text, request_reference, participant_name, program_name, starts_at, ends_at, location FROM public.get_booking_calendar_event($1::uuid)`, requestID).Scan(&e.RequestID, &e.RequestReference, &e.ParticipantName, &e.ProgramName, &e.StartsAt, &e.EndsAt, &e.Location)
+	if err != nil { return training.CalendarEvent{}, fmt.Errorf("get booking calendar event: %w", err) }
+	return e, nil
+}
+
 func (r *BookingRepository) RejectRequest(ctx context.Context, requestID, adminID string) error {
 	var rejected bool
 	err := r.db.QueryRow(ctx, `SELECT public.reject_booking_request($1::uuid, $2::uuid)`, requestID, adminID).Scan(&rejected)
