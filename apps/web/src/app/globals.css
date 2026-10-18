@@ -2085,3 +2085,55 @@ button.calendar-day.outside-month { background: #f6f8f5; }
 .admin-calendar-actions { margin-top: 4px; }
 .booking-timetree-link { color: var(--green); font-size: .8rem; font-weight: 700; text-underline-offset: 3px; }
 .booking-timetree-link:focus-visible { outline: 3px solid #9ab738; outline-offset: 3px; }
+
+/* Mobile admin training sessions: details first, actions below. */
+@media (max-width: 760px) {
+  .schedule-session-card .schedule-session-summary {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .schedule-session-card .schedule-session-summary > div:first-child {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .schedule-session-card .schedule-session-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    justify-content: stretch;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .schedule-session-card .schedule-session-actions > .admin-button:first-child,
+  .schedule-session-card .schedule-session-actions > .session-coach-assignment,
+  .schedule-session-card .schedule-session-actions > .admin-help {
+    grid-column: 1 / -1;
+  }
+
+  .schedule-session-card .schedule-session-actions .admin-button {
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    flex: initial;
+    padding: 9px 10px;
+    font-size: 0.75rem;
+    white-space: normal;
+  }
+
+  .schedule-session-card .schedule-session-actions .session-coach-assignment {
+    width: 100%;
+    min-width: 0;
+    flex: initial;
+  }
+
+  .schedule-session-card .schedule-session-actions .session-coach-assignment select {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
