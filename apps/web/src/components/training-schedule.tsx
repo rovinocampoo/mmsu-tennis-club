@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import BookingRequestForm from "@/components/booking-request-form";
 import styles from "./training-slot-selection.module.css";
 import {
@@ -163,6 +163,7 @@ export default function TrainingSchedule({
   const [view, setView] = useState<ScheduleView>("calendar");
   const [primaryTab, setPrimaryTab] = useState<PrimaryTab>("sessions");
   const [selectedSessionIDs, setSelectedSessionIDs] = useState<string[]>([]);
+  const previousSelection = useRef<string[]>([]);
   const [month, setMonth] = useState(() => {
     const [year, monthNumber] = initialMonth.split("-").map(Number);
     return { year, month: monthNumber };
@@ -220,6 +221,20 @@ export default function TrainingSchedule({
         .sort((a, b) => a.starts_at.localeCompare(b.starts_at)),
     [selectedSessionIDs, sessions],
   );
+
+  useEffect(() => {
+    const addedSlot = selectedSessionIDs.some((id) => !previousSelection.current.includes(id));
+    previousSelection.current = selectedSessionIDs;
+    if (!addedSlot || selectedSessions.length === 0) return;
+    const frame = window.requestAnimationFrame(() => {
+      const form = document.getElementById("booking-request-form");
+      if (!form) return;
+      const rect = form.getBoundingClientRect();
+      if (rect.top >= 0 && rect.bottom <= window.innerHeight) return;
+      scrollToElement("booking-request-form");
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedSessionIDs, selectedSessions.length]);
 
   const selectedSlotError = useMemo(() => {
     if (selectedSessions.length !== selectedSessionIDs.length) {
@@ -547,7 +562,6 @@ export default function TrainingSchedule({
             </div>
             {!selectedSlotError && selectedSessions.length > 0 && (
               <BookingRequestForm
-                key={selectedSessions.map((session) => session.id).join(":")}
                 sessionIds={selectedSessions.map((session) => session.id)}
               />
             )}

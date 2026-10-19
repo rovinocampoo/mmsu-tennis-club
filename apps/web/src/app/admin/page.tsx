@@ -18,6 +18,7 @@ import {
   initialAdminSessionState,
 } from "@/lib/admin-session-state.mjs";
 import AdminSchedule from "@/components/admin-schedule";
+import AdminTrainingPrograms from "@/components/admin-training-programs";
 import { createAdminApprovalMessage, createCalendarFile, createGoogleCalendarURL, getCalendarFilename } from "@/lib/booking-confirmation.mjs";
 
 type RequestRow = {
@@ -31,6 +32,7 @@ type RequestRow = {
   ends_at?: string;
   location: string;
   session_status: string;
+  training_program_name?: string;
 };
 type Player = {
   id: string;
@@ -86,7 +88,7 @@ export default function AdminPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [requests, setRequests] = useState<RequestRow[]>([]);
-  const [activeView, setActiveView] = useState<"bookings" | "schedule">(
+  const [activeView, setActiveView] = useState<"bookings" | "schedule" | "programs">(
     "bookings",
   );
   const [busy, setBusy] = useState(false);
@@ -676,9 +678,23 @@ export default function AdminPage() {
               >
                 Schedule management
               </button>
+              <button
+                className={activeView === "programs" ? "active" : ""}
+                type="button"
+                role="tab"
+                aria-selected={activeView === "programs"}
+                onClick={() => setActiveView("programs")}
+              >
+                Training programs
+              </button>
             </div>
             {activeView === "schedule" ? (
               <AdminSchedule
+                adminFetch={adminFetch}
+                onAuthorizationError={handleAdminError}
+              />
+            ) : activeView === "programs" ? (
+              <AdminTrainingPrograms
                 adminFetch={adminFetch}
                 onAuthorizationError={handleAdminError}
               />
@@ -931,6 +947,9 @@ function RequestCard({
         )}{" "}
         · {row.location} · {row.session_status}
       </p>
+      {row.training_program_name && (
+        <p><strong>Selected training program:</strong> {row.training_program_name}</p>
+      )}
       <label>
         Search existing players
         <input

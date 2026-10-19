@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/rovinocampoo/mmsu-tennis-club/apps/api/internal/adminauth"
@@ -91,6 +92,100 @@ func AdminListTrainingPrograms(repo training.BookingRepository, logger *log.Logg
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"programs": programs})
+	}
+}
+
+type trainingProgramCatalogRepository interface {
+	ListAdminTrainingProgramCatalog(context.Context) ([]training.TrainingProgram, error)
+	CreateAdminTrainingProgram(context.Context, string, string) (string, error)
+	UpdateAdminTrainingProgram(context.Context, string, string, string, bool) (bool, error)
+}
+
+func AdminTrainingProgramCatalog(repo training.BookingRepository, logger *log.Logger) http.HandlerFunc {
+	if logger == nil {
+		logger = log.Default()
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		catalog, ok := any(repo).(trainingProgramCatalogRepository)
+		if repo == nil || !ok {
+			writeError(w, http.StatusServiceUnavailable, "training program management is temporarily unavailable")
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		switch r.Method {
+		case http.MethodGet:
+			programs, err := catalog.ListAdminTrainingProgramCatalog(ctx)
+			if err != nil {
+				logger.Printf("admin list training program catalog failed: %v", err)
+				writeError(w, http.StatusInternalServerError, "could not load training programs")
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"programs": programs})
+		case http.MethodPost:
+			var request struct {
+				Name        string `json:"name"`
+				Description string `json:"description"`
+			}
+			if !decodeJSON(w, r, &request, 32*1024) {
+				return
+			}
+			request.Name = strings.TrimSpace(request.Name)
+			request.Description = strings.TrimSpace(request.Description)
+			if request.Name == "" || utf8.RuneCountInString(request.Name) > 200 {
+				writeError(w, http.StatusBadRequest, "training program name is required and must be 200 characters or fewer")
+				return
+			}
+			if utf8.RuneCountInString(request.Description) > 2000 {
+				writeError(w, http.StatusBadRequest, "training program description must be 2000 characters or fewer")
+				return
+			}
+			id, err := catalog.CreateAdminTrainingProgram(ctx, request.Name, request.Description)
+			if err != nil {
+				logger.Printf("admin create training program failed: %v", err)
+				writeError(w, http.StatusInternalServerError, "could not create training program")
+				return
+			}
+			writeJSON(w, http.StatusCreated, map[string]string{"id": id})
+		case http.MethodPatch:
+			id := strings.ToLower(strings.TrimSpace(r.PathValue("id")))
+			if !validUUID(id) {
+				writeError(w, http.StatusBadRequest, "training program ID must be a UUID")
+				return
+			}
+			var request struct {
+				Name        string `json:"name"`
+				Description string `json:"description"`
+				IsActive    *bool  `json:"is_active"`
+			}
+			if !decodeJSON(w, r, &request, 32*1024) {
+				return
+			}
+			request.Name = strings.TrimSpace(request.Name)
+			request.Description = strings.TrimSpace(request.Description)
+			if request.Name == "" || utf8.RuneCountInString(request.Name) > 200 || request.IsActive == nil {
+				writeError(w, http.StatusBadRequest, "training program name and status are required; name must be 200 characters or fewer")
+				return
+			}
+			if utf8.RuneCountInString(request.Description) > 2000 {
+				writeError(w, http.StatusBadRequest, "training program description must be 2000 characters or fewer")
+				return
+			}
+			updated, err := catalog.UpdateAdminTrainingProgram(ctx, id, request.Name, request.Description, *request.IsActive)
+			if err != nil {
+				logger.Printf("admin update training program failed: %v", err)
+				writeError(w, http.StatusInternalServerError, "could not update training program")
+				return
+			}
+			if !updated {
+				writeError(w, http.StatusNotFound, "training program not found")
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
 	}
 }
 

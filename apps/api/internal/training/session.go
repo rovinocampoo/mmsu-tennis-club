@@ -37,12 +37,14 @@ type Repository interface {
 // Participants holds the normalized per-person names; FullName is the
 // comma-joined display fallback persisted for backward compatibility.
 type BookingRequest struct {
-	SessionID    string
-	SessionIDs   []string
-	FullName     string
-	Participants []string
-	Email        string
-	Phone        string
+	SessionID          string
+	SessionIDs         []string
+	FullName           string
+	Participants       []string
+	Email              string
+	Phone              string
+	TrainingFocus      string
+	TrainingFocusNotes string
 }
 
 type TrainingSessionCreateInput struct {
@@ -79,12 +81,15 @@ type PublicationResult struct {
 }
 
 type PublicBookingStatus struct {
-	RequestReference string
-	Status           string
-	ProgramName      string
-	StartsAt         time.Time
-	EndsAt           time.Time
-	Location         string
+	RequestReference    string
+	Status              string
+	ProgramName         string
+	StartsAt            time.Time
+	EndsAt              time.Time
+	Location            string
+	TrainingFocus       string
+	TrainingProgramName string
+	TrainingFocusNotes  string
 }
 
 type CalendarEvent struct {
@@ -98,17 +103,20 @@ type CalendarEvent struct {
 }
 
 type BookingRequestRecord struct {
-	ID            string    `json:"id"`
-	SessionID     string    `json:"session_id"`
-	FullName      string    `json:"full_name"`
-	Email         *string   `json:"email"`
-	Phone         *string   `json:"phone"`
-	Status        string    `json:"status"`
-	CreatedAt     time.Time `json:"created_at"`
-	StartsAt      time.Time `json:"starts_at"`
-	EndsAt        time.Time `json:"ends_at"`
-	Location      string    `json:"location"`
-	SessionStatus string    `json:"session_status"`
+	ID                  string    `json:"id"`
+	SessionID           string    `json:"session_id"`
+	FullName            string    `json:"full_name"`
+	Email               *string   `json:"email"`
+	Phone               *string   `json:"phone"`
+	Status              string    `json:"status"`
+	CreatedAt           time.Time `json:"created_at"`
+	StartsAt            time.Time `json:"starts_at"`
+	EndsAt              time.Time `json:"ends_at"`
+	Location            string    `json:"location"`
+	SessionStatus       string    `json:"session_status"`
+	TrainingFocus       string    `json:"training_focus"`
+	TrainingProgramName string    `json:"training_program_name"`
+	TrainingFocusNotes  string    `json:"training_focus_notes"`
 }
 
 type PlayerCandidate struct {
@@ -161,6 +169,7 @@ type Program struct {
 	ID          string  `json:"id"`
 	Name        string  `json:"name"`
 	Description *string `json:"description"`
+	IsActive    bool    `json:"is_active"`
 }
 
 type AdminSessionRecord struct {

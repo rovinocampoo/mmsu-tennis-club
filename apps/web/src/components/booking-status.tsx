@@ -12,6 +12,9 @@ type BookingStatus = {
   ends_at: string;
   location: string;
   next_steps: string[];
+  training_focus: string;
+  training_program_name?: string;
+  training_focus_notes: string;
 };
 
 type Phase = "loading" | "loaded" | "invalid" | "expired" | "error";
@@ -41,7 +44,9 @@ function isBookingStatus(value: unknown): value is BookingStatus {
     typeof status.ends_at === "string" &&
     typeof status.location === "string" &&
     Array.isArray(status.next_steps) &&
-    status.next_steps.every((step) => typeof step === "string")
+    status.next_steps.every((step) => typeof step === "string") &&
+    typeof status.training_focus === "string" &&
+    typeof status.training_focus_notes === "string"
   );
 }
 
@@ -183,7 +188,7 @@ export default function BookingStatus() {
             <span className="state-icon" aria-hidden="true">!</span>
             <div>
               <h2>Status temporarily unavailable</h2>
-              <p>We couldn’t load your request. Please try again.</p>
+              <p>We couldn't load your request. Please try again.</p>
               <button className="request-submit" type="button" onClick={() => setAttempt((value) => value + 1)}>
                 Try again
               </button>
@@ -206,6 +211,19 @@ export default function BookingStatus() {
               <div><dt>Date</dt><dd>{manilaDate.format(new Date(status.starts_at))}</dd></div>
               <div><dt>Time</dt><dd>{manilaTime.format(new Date(status.starts_at))} – {manilaTime.format(new Date(status.ends_at))} (PHT)</dd></div>
               <div><dt>Location</dt><dd>{status.location}</dd></div>
+              {(status.training_program_name || status.training_focus_notes) && (
+                <div>
+                  {status.training_program_name && (
+                    <>
+                      <dt>Selected training program</dt>
+                      <dd>{status.training_program_name}</dd>
+                    </>
+                  )}
+                  {status.training_focus_notes && (
+                    <dd>{status.training_focus_notes}</dd>
+                  )}
+                </div>
+              )}
             </dl>
             <div className="booking-next-steps">
               <h3>Next steps</h3>
@@ -229,7 +247,7 @@ export default function BookingStatus() {
                 </button>
               </div>
               {copyNotice && <p className="booking-copy-notice" role="status" aria-live="polite">{copyNotice}</p>}
-              <p className="request-note">Share the copied message in Messenger or SMS.</p>
+              <p className="request-note">Copy the booking update below and send it to the club's messenger page.</p>
             </div>
           </article>
         )}

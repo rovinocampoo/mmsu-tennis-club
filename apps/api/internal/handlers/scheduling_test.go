@@ -18,26 +18,30 @@ import (
 
 type schedulingRepoStub struct {
 	bookingStub
-	coachAvailabilities []training.CoachAvailability
-	programs            []training.TrainingProgram
-	adminSessions       []training.AdminSessionRecord
-	assignedSessions    []training.AssignedTrainingSession
-	assignedCoachID     *string
-	assignmentSessionID string
-	createdSessionID    string
-	createdBatch        []training.TrainingSessionCreateInput
-	editedSessionID     string
-	editedSession       training.TrainingSessionEditInput
-	coaches             []training.Coach
-	coachDirectory      []training.CoachDirectoryEntry
-	coachSchedule       []training.CoachScheduleSession
-	createdCoachName    string
-	updatedCoachID      string
-	updatedCoachActive  bool
-	publishedStart      time.Time
-	publishedEnd        time.Time
-	publishCalls        int
-	publicationResult   training.PublicationResult
+	coachAvailabilities  []training.CoachAvailability
+	programs             []training.TrainingProgram
+	createdProgramName   string
+	updatedProgramID     string
+	updatedProgramActive bool
+	programUpdateFound   bool
+	adminSessions        []training.AdminSessionRecord
+	assignedSessions     []training.AssignedTrainingSession
+	assignedCoachID      *string
+	assignmentSessionID  string
+	createdSessionID     string
+	createdBatch         []training.TrainingSessionCreateInput
+	editedSessionID      string
+	editedSession        training.TrainingSessionEditInput
+	coaches              []training.Coach
+	coachDirectory       []training.CoachDirectoryEntry
+	coachSchedule        []training.CoachScheduleSession
+	createdCoachName     string
+	updatedCoachID       string
+	updatedCoachActive   bool
+	publishedStart       time.Time
+	publishedEnd         time.Time
+	publishCalls         int
+	publicationResult    training.PublicationResult
 }
 
 const (
@@ -109,6 +113,21 @@ func (s *schedulingRepoStub) ListAllCoachAvailability(context.Context) ([]traini
 
 func (s *schedulingRepoStub) ListAdminTrainingPrograms(context.Context) ([]training.TrainingProgram, error) {
 	return s.programs, nil
+}
+
+func (s *schedulingRepoStub) ListAdminTrainingProgramCatalog(context.Context) ([]training.TrainingProgram, error) {
+	return s.programs, nil
+}
+
+func (s *schedulingRepoStub) CreateAdminTrainingProgram(_ context.Context, name, _ string) (string, error) {
+	s.createdProgramName = name
+	return testProgramID, nil
+}
+
+func (s *schedulingRepoStub) UpdateAdminTrainingProgram(_ context.Context, id, _, _ string, isActive bool) (bool, error) {
+	s.updatedProgramID = id
+	s.updatedProgramActive = isActive
+	return s.programUpdateFound, nil
 }
 
 func (s *schedulingRepoStub) ListAdminTrainingSessions(context.Context) ([]training.AdminSessionRecord, error) {
@@ -370,6 +389,55 @@ func TestAdminSchedulingWorkflow(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &sessResp)
 	if sessResp.Sessions[0].Status != "cancelled" || *sessResp.Sessions[0].Notes != newNotes {
 		t.Fatalf("session status not updated: %#v", sessResp.Sessions[0])
+	}
+}
+
+func TestAdminTrainingProgramCatalogValidationAndSoftDeactivation(t *testing.T) {
+	logger := log.New(io.Discard, "", 0)
+	repo := &schedulingRepoStub{programs: []training.TrainingProgram{
+		{ID: testProgramID, Name: "Adult Training", Description: nil, IsActive: true},
+		{ID: testSessionID, Name: "Archived Clinic", Description: nil, IsActive: false},
+	}, programUpdateFound: true}
+	handler := AdminTrainingProgramCatalog(repo, logger)
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/admin/training-program-catalog", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"is_active":false`) {
+		t.Fatalf("list catalog status=%d body=%s, want active and inactive records", response.Code, response.Body)
+	}
+
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/admin/training-program-catalog", strings.NewReader(`{"name":"  New Clinic  ","description":"  Weekly drills "}`)))
+	if response.Code != http.StatusCreated || repo.createdProgramName != "New Clinic" {
+		t.Fatalf("create program status=%d body=%s name=%q", response.Code, response.Body, repo.createdProgramName)
+	}
+
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/admin/training-program-catalog", strings.NewReader(`{"name":"   "}`)))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("blank program name status=%d want=%d", response.Code, http.StatusBadRequest)
+	}
+	tooLongName := strings.Repeat("a", 201)
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/admin/training-program-catalog", strings.NewReader(`{"name":"`+tooLongName+`"}`)))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("overlong program name status=%d want=%d", response.Code, http.StatusBadRequest)
+	}
+
+	request := httptest.NewRequest(http.MethodPatch, "/api/admin/training-program-catalog/"+testProgramID, strings.NewReader(`{"name":"Adult Training","description":"Updated","is_active":false}`))
+	request.SetPathValue("id", testProgramID)
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || repo.updatedProgramID != testProgramID || repo.updatedProgramActive {
+		t.Fatalf("deactivate program status=%d body=%s id=%q active=%v", response.Code, response.Body, repo.updatedProgramID, repo.updatedProgramActive)
+	}
+
+	request = httptest.NewRequest(http.MethodPatch, "/api/admin/training-program-catalog/not-a-uuid", strings.NewReader(`{"name":"Adult Training","is_active":true}`))
+	request.SetPathValue("id", "not-a-uuid")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("invalid program ID status=%d want=%d", response.Code, http.StatusBadRequest)
 	}
 }
 

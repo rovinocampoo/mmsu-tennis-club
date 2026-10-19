@@ -33,6 +33,121 @@ func TestManualBookingMigrationRejectionDoesNotCreateBooking(t *testing.T) {
 	}
 }
 
+func TestBookingTrainingProgramMigrationRejectsInvalidOrInactivePrograms(t *testing.T) {
+	content, err := os.ReadFile("../../../../supabase/migrations/20261019190000_validate_booking_training_program.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql := string(content)
+	for _, expected := range []string{
+		"BEFORE INSERT OR UPDATE OF training_focus ON public.booking_requests",
+		"SECURITY DEFINER",
+		"OWNER TO mmsu_booking_function_owner",
+		"NEW.training_focus::uuid",
+		"WHERE p.id = v_program_id AND p.is_active IS TRUE",
+		"FOR SHARE",
+		"ERRCODE = 'PZ011'",
+		"FROM PUBLIC, anon, authenticated, service_role, mmsu_schedule_reader, mmsu_booking_api",
+		"GRANT mmsu_booking_function_owner TO CURRENT_USER WITH SET TRUE",
+		"GRANT CREATE ON SCHEMA public TO mmsu_booking_function_owner",
+		"GRANT mmsu_booking_function_owner TO CURRENT_USER WITH SET FALSE",
+	} {
+		if !strings.Contains(sql, expected) {
+			t.Errorf("booking program validation migration is missing %q", expected)
+		}
+	}
+}
+
+func TestTrainingFocusMigrationDropsChangedTableFunctionsBeforeRecreating(t *testing.T) {
+	content, err := os.ReadFile("../../../../supabase/migrations/20261019180000_add_training_focus_to_booking_requests.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql := string(content)
+	for _, name := range []string{"get_public_booking_status", "list_pending_booking_requests_with_slots"} {
+		drop := strings.Index(sql, "DROP FUNCTION IF EXISTS public."+name)
+		create := strings.Index(sql, "CREATE OR REPLACE FUNCTION public."+name)
+		if drop < 0 || create < 0 || drop >= create {
+			t.Errorf("migration must drop %s before recreating its changed return row type", name)
+		}
+	}
+	for _, expected := range []string{
+		"ADD COLUMN IF NOT EXISTS training_focus text",
+		"ADD COLUMN IF NOT EXISTS training_focus_notes text",
+		"create_public_booking_request_with_participants_token(jsonb, jsonb, text, text, bytea, text, text)",
+		"JOIN public.booking_request_sessions AS requested ON requested.request_id = br.id",
+		"pg_catalog.bool_and(s.status = 'open')",
+		"pg_catalog.min(s.starts_at), pg_catalog.max(s.ends_at)",
+		"GRANT EXECUTE ON FUNCTION public.get_public_booking_status(bytea)",
+		"ALTER FUNCTION public.get_public_booking_status(bytea)\n    OWNER TO mmsu_booking_function_owner",
+		"GRANT EXECUTE ON FUNCTION public.list_pending_booking_requests_with_slots()",
+		"ALTER FUNCTION public.list_pending_booking_requests_with_slots()\n    OWNER TO mmsu_booking_function_owner",
+		"GRANT mmsu_booking_function_owner TO CURRENT_USER WITH SET TRUE",
+		"GRANT CREATE ON SCHEMA public TO mmsu_booking_function_owner",
+		"GRANT mmsu_booking_function_owner TO CURRENT_USER WITH SET FALSE",
+	} {
+		if !strings.Contains(sql, expected) {
+			t.Errorf("training focus migration missing re-created permission or idempotence clause %q", expected)
+		}
+	}
+	if strings.Contains(sql, "br.session_status") {
+		t.Fatal("booking requests do not store a session_status column; it must be derived from the requested slots")
+	}
+	if strings.Contains(sql, "create_public_booking_request_with_participants_token(uuid, text, text, text, bytea, text, text)") {
+		t.Fatal("training focus migration uses an obsolete booking-function signature")
+	}
+	lastOwnerTransfer := strings.LastIndex(sql, "ALTER FUNCTION public.list_pending_booking_requests_with_slots()\n    OWNER TO mmsu_booking_function_owner")
+	revokeSchemaCreate := strings.LastIndex(sql, "REVOKE CREATE ON SCHEMA public FROM mmsu_booking_function_owner")
+	if lastOwnerTransfer < 0 || revokeSchemaCreate < lastOwnerTransfer {
+		t.Fatal("restricted owner must retain schema CREATE until all function ownership transfers complete")
+	}
+}
+
+func TestTrainingFocusBookingFixDelegatesToValidatedMultiSlotFunction(t *testing.T) {
+	content, err := os.ReadFile("../../../../supabase/migrations/20261019200000_fix_training_focus_booking_request.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql := string(content)
+	for _, expected := range []string{
+		"v_public_reference := public.create_public_booking_request_with_participants_token(",
+		"p_session_ids,\n        p_participants,\n        p_email,\n        p_phone,\n        p_tracking_token_hash\n    );",
+		"UPDATE public.booking_requests",
+		"training_focus = p_training_focus",
+		"training_focus_notes = p_training_focus_notes",
+		"OWNER TO mmsu_booking_function_owner",
+		"GRANT EXECUTE ON FUNCTION public.create_public_booking_request_with_participants_token(jsonb, jsonb, text, text, bytea, text, text)",
+	} {
+		if !strings.Contains(sql, expected) {
+			t.Errorf("training-focus corrective migration is missing %q", expected)
+		}
+	}
+	if strings.Contains(sql, "cardinality(p_session_ids)") || strings.Contains(sql, "cardinality(p_participants)") {
+		t.Fatal("jsonb inputs must be handled by the established validated booking function")
+	}
+}
+
+func TestAdminBookingRequestListGrantIsRestored(t *testing.T) {
+	content, err := os.ReadFile("../../../../supabase/migrations/20261019210000_restore_admin_booking_request_list_grant.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql := string(content)
+	for _, expected := range []string{
+		"REVOKE ALL ON FUNCTION public.list_pending_booking_requests_with_slots()",
+		"mmsu_booking_api, mmsu_booking_admin_api",
+		"GRANT EXECUTE ON FUNCTION public.list_pending_booking_requests_with_slots()",
+		"TO mmsu_booking_admin_api",
+	} {
+		if !strings.Contains(sql, expected) {
+			t.Errorf("admin booking-list grant migration is missing %q", expected)
+		}
+	}
+	if strings.Contains(sql, "GRANT EXECUTE ON FUNCTION public.list_pending_booking_requests_with_slots()\n    TO mmsu_booking_api") {
+		t.Fatal("public booking API role must not execute the admin booking-list function")
+	}
+}
+
 func TestApprovalNotificationMigrationPersistsStatusAndRestrictsExecution(t *testing.T) {
 	content, err := os.ReadFile("../../../../supabase/migrations/20261012100000_add_booking_approval_notifications.sql")
 	if err != nil {

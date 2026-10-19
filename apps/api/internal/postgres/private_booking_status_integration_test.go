@@ -46,13 +46,24 @@ func TestPrivateBookingStatusPostgresWorkflow(t *testing.T) {
 		t.Fatal("refusing integration test writes outside 127.0.0.1:55432/mmsu_booking_test")
 	}
 	var bookingAPIStatus, adminAPIStatus, anonStatus, authenticatedStatus, bookingAPIWithoutToken bool
+	var bookingAPICanLookupProgram, adminAPICanLookupProgram, bookingAPICanSelectPrograms bool
+	var bookingAPICanListPending, adminAPICanListPending, bookingAPICanListPrograms, adminAPICanListPrograms bool
 	if err := db.QueryRow(ctx, `SELECT
 		has_function_privilege('mmsu_booking_api', 'public.get_public_booking_status(bytea)', 'EXECUTE'),
 		has_function_privilege('mmsu_booking_admin_api', 'public.get_public_booking_status(bytea)', 'EXECUTE'),
 		has_function_privilege('anon', 'public.get_public_booking_status(bytea)', 'EXECUTE'),
 		has_function_privilege('authenticated', 'public.get_public_booking_status(bytea)', 'EXECUTE'),
-		has_function_privilege('mmsu_booking_api', 'public.create_public_booking_request(uuid,text,text,text)', 'EXECUTE')`).Scan(
+		has_function_privilege('mmsu_booking_api', 'public.create_public_booking_request(uuid,text,text,text)', 'EXECUTE'),
+		has_function_privilege('mmsu_booking_api', 'public.get_active_training_program_name(text)', 'EXECUTE'),
+		has_function_privilege('mmsu_booking_admin_api', 'public.get_active_training_program_name(text)', 'EXECUTE'),
+		has_table_privilege('mmsu_booking_api', 'public.training_programs', 'SELECT'),
+		has_function_privilege('mmsu_booking_api', 'public.list_pending_booking_requests_with_slots()', 'EXECUTE'),
+		has_function_privilege('mmsu_booking_admin_api', 'public.list_pending_booking_requests_with_slots()', 'EXECUTE'),
+		has_function_privilege('mmsu_booking_api', 'public.admin_list_training_programs()', 'EXECUTE'),
+		has_function_privilege('mmsu_booking_admin_api', 'public.admin_list_training_programs()', 'EXECUTE')`).Scan(
 		&bookingAPIStatus, &adminAPIStatus, &anonStatus, &authenticatedStatus, &bookingAPIWithoutToken,
+		&bookingAPICanLookupProgram, &adminAPICanLookupProgram, &bookingAPICanSelectPrograms,
+		&bookingAPICanListPending, &adminAPICanListPending, &bookingAPICanListPrograms, &adminAPICanListPrograms,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -60,15 +71,26 @@ func TestPrivateBookingStatusPostgresWorkflow(t *testing.T) {
 		t.Fatalf("status grants: booking API=%t admin API=%t anon=%t authenticated=%t legacy create=%t",
 			bookingAPIStatus, adminAPIStatus, anonStatus, authenticatedStatus, bookingAPIWithoutToken)
 	}
+	if !bookingAPICanLookupProgram || adminAPICanLookupProgram || bookingAPICanSelectPrograms {
+		t.Fatalf("program lookup grants: booking API function=%t admin API function=%t booking API table SELECT=%t",
+			bookingAPICanLookupProgram, adminAPICanLookupProgram, bookingAPICanSelectPrograms)
+	}
+	if bookingAPICanListPending || !adminAPICanListPending || bookingAPICanListPrograms || !adminAPICanListPrograms {
+		t.Fatalf("admin request-list grants: booking API pending=%t admin API pending=%t booking API programs=%t admin API programs=%t",
+			bookingAPICanListPending, adminAPICanListPending, bookingAPICanListPrograms, adminAPICanListPrograms)
+	}
 
 	repository := NewBookingRepository(db)
-	var runID, adminID, programID, sessionID string
+	var runID, adminID, programID, selectedProgramID, sessionID string
 	if err := db.QueryRow(ctx, `SELECT gen_random_uuid()::text`).Scan(&runID); err != nil {
 		t.Fatal(err)
 	}
 	adminID = runID
 	contactPrefix := "private-status-" + runID
 	if err := db.QueryRow(ctx, `INSERT INTO public.training_programs(name) VALUES ('Status integration ' || $1) RETURNING id::text`, runID).Scan(&programID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(ctx, `INSERT INTO public.training_programs(name) VALUES ('Selected status integration ' || $1) RETURNING id::text`, runID).Scan(&selectedProgramID); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.QueryRow(ctx, `
@@ -85,10 +107,11 @@ func TestPrivateBookingStatusPostgresWorkflow(t *testing.T) {
 		_, _ = db.Exec(context.Background(), `DELETE FROM public.booking_requests WHERE id = ANY($1::uuid[])`, requestIDs)
 		_, _ = db.Exec(context.Background(), `DELETE FROM public.players WHERE email LIKE $1`, contactPrefix+"-%")
 		_, _ = db.Exec(context.Background(), `DELETE FROM public.training_sessions WHERE id = $1::uuid`, sessionID)
+		_, _ = db.Exec(context.Background(), `DELETE FROM public.training_programs WHERE id = $1::uuid`, selectedProgramID)
 		_, _ = db.Exec(context.Background(), `DELETE FROM public.training_programs WHERE id = $1::uuid`, programID)
 	})
 
-	newRequest := func(suffix string) (string, string, []byte) {
+	newRequest := func(suffix string, trainingFocus ...string) (string, string, []byte) {
 		t.Helper()
 		var token [32]byte
 		if _, err := rand.Read(token[:]); err != nil {
@@ -96,11 +119,15 @@ func TestPrivateBookingStatusPostgresWorkflow(t *testing.T) {
 		}
 		hash := sha256.Sum256(token[:])
 		email := fmt.Sprintf("%s-%s@example.test", contactPrefix, suffix)
-		reference, err := repository.CreateRequest(ctx, training.BookingRequest{
+		request := training.BookingRequest{
 			SessionID: sessionID,
 			FullName:  "Status " + suffix,
 			Email:     email,
-		}, hash[:])
+		}
+		if len(trainingFocus) > 0 {
+			request.TrainingFocus = trainingFocus[0]
+		}
+		reference, err := repository.CreateRequest(ctx, request, hash[:])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -113,6 +140,7 @@ func TestPrivateBookingStatusPostgresWorkflow(t *testing.T) {
 	}
 
 	_, pendingReference, pendingToken := newRequest("pending")
+	_, _, selectedToken := newRequest("selected", selectedProgramID)
 	approvedID, approvedReference, approvedToken := newRequest("approved")
 	rejectedID, _, rejectedToken := newRequest("rejected")
 	_, _, expiredToken := newRequest("expired")
@@ -163,6 +191,27 @@ func TestPrivateBookingStatusPostgresWorkflow(t *testing.T) {
 				t.Fatalf("missing session time in status: %#v", status)
 			}
 		})
+	}
+	unselectedStatus, err := readStatus(pendingToken)
+	if err != nil || unselectedStatus.TrainingFocus != "" || unselectedStatus.TrainingFocusNotes != "" || unselectedStatus.TrainingProgramName != "" {
+		t.Fatalf("legacy request with NULL training focus fields: status=%#v err=%v", unselectedStatus, err)
+	}
+	selectedStatus, err := readStatus(selectedToken)
+	if err != nil || selectedStatus.TrainingProgramName != "Selected status integration "+runID {
+		t.Fatalf("selected training program status=%#v err=%v", selectedStatus, err)
+	}
+	for _, programID := range []any{"missing-program-id", nil} {
+		var name string
+		if err := db.QueryRow(ctx, `SELECT COALESCE(public.get_active_training_program_name($1::text), '')`, programID).Scan(&name); err != nil || name != "" {
+			t.Fatalf("missing/NULL program lookup returned name=%q err=%v", name, err)
+		}
+	}
+	if _, err := db.Exec(ctx, `UPDATE public.training_programs SET is_active = false WHERE id = $1::uuid`, selectedProgramID); err != nil {
+		t.Fatal(err)
+	}
+	selectedStatus, err = readStatus(selectedToken)
+	if err != nil || selectedStatus.TrainingProgramName != "" {
+		t.Fatalf("inactive historical program should safely omit its display name: status=%#v err=%v", selectedStatus, err)
 	}
 
 	pendingStatus, err := readStatus(pendingToken)

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -235,6 +236,21 @@ func TestBookingRequestForwardsNormalizedParticipants(t *testing.T) {
 	}
 }
 
+func TestBookingRequestForwardsOptionalTrainingProgramSelection(t *testing.T) {
+	repo := &bookingStub{createdID: "request-id"}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/booking-requests", strings.NewReader(
+		`{"session_id":"11111111-1111-4111-8111-111111111111","full_name":"Alex","training_focus":"22222222-2222-4222-8222-222222222222","training_focus_notes":"  Improve serve  "}`,
+	))
+	BookingRequest(repo, nil)(w, r)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("request response=%d %s", w.Code, w.Body)
+	}
+	if repo.request.TrainingFocus != "22222222-2222-4222-8222-222222222222" || repo.request.TrainingFocusNotes != "Improve serve" {
+		t.Fatalf("training program fields were not forwarded: %#v", repo.request)
+	}
+}
+
 func TestBookingRequestFallsBackToFullNameForOlderClients(t *testing.T) {
 	repo := &bookingStub{createdID: "request-id"}
 	w := httptest.NewRecorder()
@@ -295,12 +311,14 @@ func TestPublicBookingStatusValidTokenReturnsOnlyPublicFields(t *testing.T) {
 	token := base64.RawURLEncoding.EncodeToString(tokenBytes)
 	startsAt := time.Date(2026, 10, 14, 8, 0, 0, 0, time.UTC)
 	repo := &bookingStub{status: training.PublicBookingStatus{
-		RequestReference: "MMSU-1234567890ABCDEF",
-		Status:           "approved",
-		ProgramName:      "Junior Training",
-		StartsAt:         startsAt,
-		EndsAt:           startsAt.Add(time.Hour),
-		Location:         "MMSU Courts",
+		RequestReference:    "MMSU-1234567890ABCDEF",
+		Status:              "approved",
+		ProgramName:         "Junior Training",
+		StartsAt:            startsAt,
+		EndsAt:              startsAt.Add(time.Hour),
+		Location:            "MMSU Courts",
+		TrainingFocus:       "22222222-2222-4222-8222-222222222222",
+		TrainingProgramName: "Beginner Tennis",
 	}}
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/booking-status", strings.NewReader(`{"tracking_token":"`+token+`"}`))
@@ -308,7 +326,7 @@ func TestPublicBookingStatusValidTokenReturnsOnlyPublicFields(t *testing.T) {
 	if w.Code != http.StatusOK || w.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("status=%d headers=%v body=%s", w.Code, w.Header(), w.Body)
 	}
-	for _, expected := range []string{`"request_reference":"MMSU-1234567890ABCDEF"`, `"status":"approved"`, `"program_name":"Junior Training"`, `"location":"MMSU Courts"`, `"next_steps"`} {
+	for _, expected := range []string{`"request_reference":"MMSU-1234567890ABCDEF"`, `"status":"approved"`, `"program_name":"Junior Training"`, `"location":"MMSU Courts"`, `"training_program_name":"Beginner Tennis"`, `"next_steps"`} {
 		if !strings.Contains(w.Body.String(), expected) {
 			t.Errorf("status response missing %q: %s", expected, w.Body)
 		}
@@ -459,6 +477,16 @@ func TestBookingRequestDoesNotLeakDatabaseErrors(t *testing.T) {
 	BookingRequest(repo, log.New(io.Discard, "", 0))(w, r)
 	if w.Code != http.StatusInternalServerError || strings.Contains(w.Body.String(), "secret") {
 		t.Fatalf("response=%d %s", w.Code, w.Body)
+	}
+}
+
+func TestLogBookingErrorIncludesSafeDatabaseCode(t *testing.T) {
+	var output strings.Builder
+	logger := log.New(&output, "", 0)
+	err := fmt.Errorf("wrapped database error: %w", &pgconn.PgError{Code: "42883", Message: "sensitive detail"})
+	logBookingError(logger, "create booking request", err)
+	if !strings.Contains(output.String(), "SQLSTATE 42883") || strings.Contains(output.String(), "sensitive detail") {
+		t.Fatalf("log should include only the safe database code: %q", output.String())
 	}
 }
 

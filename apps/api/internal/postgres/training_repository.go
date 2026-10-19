@@ -53,7 +53,7 @@ WHERE s.starts_at >= GREATEST($1, pg_catalog.statement_timestamp())
 ORDER BY s.starts_at ASC`
 
 const listActiveTrainingPrograms = `
-SELECT id::text, name, description
+SELECT id::text, name, description, is_active
 FROM public.training_programs
 WHERE is_active IS TRUE
 ORDER BY name ASC`
@@ -68,7 +68,7 @@ func (r *TrainingRepository) ListActivePrograms(ctx context.Context) ([]training
 	programs := make([]training.Program, 0)
 	for rows.Next() {
 		var program training.Program
-		if err := rows.Scan(&program.ID, &program.Name, &program.Description); err != nil {
+		if err := rows.Scan(&program.ID, &program.Name, &program.Description, &program.IsActive); err != nil {
 			return nil, fmt.Errorf("scan active training program: %w", err)
 		}
 		programs = append(programs, program)

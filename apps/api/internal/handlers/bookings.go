@@ -21,12 +21,14 @@ import (
 )
 
 type bookingRequestInput struct {
-	SessionID    string   `json:"session_id"`
-	SessionIDs   []string `json:"session_ids"`
-	FullName     string   `json:"full_name"`
-	Participants []string `json:"participants"`
-	Email        string   `json:"email"`
-	Phone        string   `json:"phone"`
+	SessionID          string   `json:"session_id"`
+	SessionIDs         []string `json:"session_ids"`
+	FullName           string   `json:"full_name"`
+	Participants       []string `json:"participants"`
+	Email              string   `json:"email"`
+	Phone              string   `json:"phone"`
+	TrainingFocus      string   `json:"training_focus"`
+	TrainingFocusNotes string   `json:"training_focus_notes"`
 }
 
 // maxBookingParticipants bounds the per-request participant list. The joined
@@ -102,6 +104,8 @@ func BookingRequest(repo training.BookingRepository, logger interface{ Printf(st
 		}
 		input.Participants = participants
 		input.FullName = strings.Join(participants, ", ")
+		input.TrainingFocus = strings.TrimSpace(input.TrainingFocus)
+		input.TrainingFocusNotes = strings.TrimSpace(input.TrainingFocusNotes)
 		seenSessionIDs := make(map[string]struct{}, len(input.SessionIDs))
 		for index, id := range input.SessionIDs {
 			id = strings.ToLower(strings.TrimSpace(id))
@@ -144,7 +148,11 @@ func BookingRequest(repo training.BookingRepository, logger interface{ Printf(st
 		tokenHash := sha256.Sum256(tokenBytes[:])
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		reference, err := repo.CreateRequest(ctx, training.BookingRequest{SessionID: input.SessionID, SessionIDs: input.SessionIDs, FullName: input.FullName, Participants: input.Participants, Email: input.Email, Phone: input.Phone}, tokenHash[:])
+		reference, err := repo.CreateRequest(ctx, training.BookingRequest{
+			SessionID: input.SessionID, SessionIDs: input.SessionIDs, FullName: input.FullName,
+			Participants: input.Participants, Email: input.Email, Phone: input.Phone,
+			TrainingFocus: input.TrainingFocus, TrainingFocusNotes: input.TrainingFocusNotes,
+		}, tokenHash[:])
 		if err != nil {
 			writeBookingRepoError(w, logger, "create booking request", err)
 			return
@@ -158,13 +166,16 @@ type publicBookingStatusInput struct {
 }
 
 type publicBookingStatusResponse struct {
-	RequestReference string   `json:"request_reference"`
-	Status           string   `json:"status"`
-	ProgramName      string   `json:"program_name"`
-	StartsAt         string   `json:"starts_at"`
-	EndsAt           string   `json:"ends_at"`
-	Location         string   `json:"location"`
-	NextSteps        []string `json:"next_steps"`
+	RequestReference    string   `json:"request_reference"`
+	Status              string   `json:"status"`
+	ProgramName         string   `json:"program_name"`
+	StartsAt            string   `json:"starts_at"`
+	EndsAt              string   `json:"ends_at"`
+	Location            string   `json:"location"`
+	NextSteps           []string `json:"next_steps"`
+	TrainingFocus       string   `json:"training_focus"`
+	TrainingProgramName string   `json:"training_program_name"`
+	TrainingFocusNotes  string   `json:"training_focus_notes"`
 }
 
 func PublicBookingStatus(repo training.BookingRepository, logger interface{ Printf(string, ...any) }) http.HandlerFunc {
@@ -210,13 +221,16 @@ func PublicBookingStatus(repo training.BookingRepository, logger interface{ Prin
 			return
 		}
 		writeJSON(w, http.StatusOK, publicBookingStatusResponse{
-			RequestReference: status.RequestReference,
-			Status:           status.Status,
-			ProgramName:      status.ProgramName,
-			StartsAt:         status.StartsAt.UTC().Format(time.RFC3339),
-			EndsAt:           status.EndsAt.UTC().Format(time.RFC3339),
-			Location:         status.Location,
-			NextSteps:        nextSteps,
+			RequestReference:    status.RequestReference,
+			Status:              status.Status,
+			ProgramName:         status.ProgramName,
+			StartsAt:            status.StartsAt.UTC().Format(time.RFC3339),
+			EndsAt:              status.EndsAt.UTC().Format(time.RFC3339),
+			Location:            status.Location,
+			NextSteps:           nextSteps,
+			TrainingFocus:       status.TrainingFocus,
+			TrainingProgramName: status.TrainingProgramName,
+			TrainingFocusNotes:  status.TrainingFocusNotes,
 		})
 	}
 }
@@ -489,6 +503,8 @@ func writeBookingRepoError(w http.ResponseWriter, logger interface{ Printf(strin
 			writeBookingError(w, http.StatusConflict, "capacity cannot be lower than the number of confirmed bookings")
 		case "PZ010":
 			writeBookingError(w, http.StatusBadRequest, "select adjacent slots from the same program, date, and location")
+		case "PZ011":
+			writeBookingError(w, http.StatusBadRequest, "select an active training program or leave the selection empty")
 		default:
 			logBookingError(logger, operation, err)
 			writeBookingError(w, http.StatusInternalServerError, "booking request could not be processed")
@@ -501,6 +517,11 @@ func writeBookingRepoError(w http.ResponseWriter, logger interface{ Printf(strin
 
 func logBookingError(logger interface{ Printf(string, ...any) }, operation string, err error) {
 	if logger != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			logger.Printf("%s failed (database SQLSTATE %s)", operation, pgErr.Code)
+			return
+		}
 		logger.Printf("%s failed (error type %T)", operation, err)
 	}
 }

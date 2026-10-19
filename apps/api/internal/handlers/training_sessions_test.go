@@ -150,6 +150,7 @@ func TestTrainingProgramsReturnsActiveCatalogFields(t *testing.T) {
 		ID:          "11111111-1111-4111-8111-111111111111",
 		Name:        "Beginner Tennis",
 		Description: &description,
+		IsActive:    true,
 	}}})
 	request := httptest.NewRequest(http.MethodGet, "/api/training-programs", nil)
 	response := httptest.NewRecorder()
@@ -161,8 +162,18 @@ func TestTrainingProgramsReturnsActiveCatalogFields(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &programs); err != nil {
 		t.Fatalf("response is not valid JSON: %v", err)
 	}
-	if len(programs) != 1 || strings.Contains(response.Body.String(), "is_active") {
+	if len(programs) != 1 {
 		t.Fatalf("unexpected public program response: %s", response.Body)
+	}
+	fields := programs[0]
+	var active bool
+	if err := json.Unmarshal(fields["is_active"], &active); err != nil || !active {
+		t.Errorf("is_active = %s, want true", fields["is_active"])
+	}
+	for _, field := range []string{"id", "name", "description"} {
+		if _, ok := fields[field]; !ok {
+			t.Errorf("public program response is missing %q: %s", field, response.Body)
+		}
 	}
 }
 
@@ -172,6 +183,20 @@ func TestTrainingProgramsReturnsEmptyArrayWhenNoneExist(t *testing.T) {
 	TrainingPrograms(training.NewService(trainingRepositoryStub{}), log.New(io.Discard, "", 0)).ServeHTTP(response, request)
 	if response.Code != http.StatusOK || strings.TrimSpace(response.Body.String()) != "[]" {
 		t.Fatalf("status=%d body=%q", response.Code, response.Body.String())
+	}
+}
+
+func TestTrainingProgramsReturnsSafeUnavailableError(t *testing.T) {
+	databaseError := "permission denied for table training_programs"
+	service := training.NewService(trainingRepositoryStub{err: errors.New(databaseError)})
+	request := httptest.NewRequest(http.MethodGet, "/api/training-programs", nil)
+	response := httptest.NewRecorder()
+	TrainingPrograms(service, log.New(io.Discard, "", 0)).ServeHTTP(response, request)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+	if strings.Contains(response.Body.String(), databaseError) || !strings.Contains(response.Body.String(), "temporarily unavailable") {
+		t.Errorf("unexpected training-program error response: %s", response.Body)
 	}
 }
 

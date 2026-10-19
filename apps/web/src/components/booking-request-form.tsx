@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useReducer, useRef, useState } from "react";
+import { FormEvent, useMemo, useReducer, useRef, useState, useEffect } from "react";
 import {
   bookingRequestReducer,
   initialBookingRequestState,
@@ -15,6 +15,30 @@ import {
   removeParticipant,
 } from "./booking-participants.mjs";
 
+type TrainingProgram = {
+  id: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+};
+
+type TrainingFocusState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "loaded"; programs: TrainingProgram[]; selectedId: string | null };
+
+export function isTrainingProgram(value: unknown): value is TrainingProgram {
+	if (!value || typeof value !== "object") return false;
+	const p = value as Record<string, unknown>;
+	return (
+		typeof p.id === "string" &&
+		typeof p.name === "string" &&
+		(typeof p.description === "string" || p.description === null) &&
+		typeof p.is_active === "boolean"
+	);
+}
+
 export default function BookingRequestForm({
   sessionIds,
   sessionId,
@@ -23,7 +47,7 @@ export default function BookingRequestForm({
   sessionId?: string;
 }) {
   const requestedSessionIDs = sessionIds ?? (sessionId ? [sessionId] : []);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(requestedSessionIDs.length > 0);
   const [request, dispatch] = useReducer(
     bookingRequestReducer,
     initialBookingRequestState,
@@ -34,11 +58,21 @@ export default function BookingRequestForm({
   const [attempted, setAttempted] = useState(false);
   const submitting = useRef(false);
   const [copyMessage, setCopyMessage] = useState("");
+  const [focusState, setFocusState] = useState<TrainingFocusState>({
+    kind: "idle",
+  });
+  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
+  const [showFocusNotes, setShowFocusNotes] = useState(false);
+  const [focusNotes, setFocusNotes] = useState("");
 
   const participantMessage = useMemo(
     () => participantError(participants),
     [participants],
   );
+
+  useEffect(() => {
+    loadTrainingPrograms();
+  }, []);
 
   function updateParticipantName(id: string, name: string) {
     setParticipants((current) =>
@@ -54,6 +88,46 @@ export default function BookingRequestForm({
 
   function handleRemoveParticipant(id: string) {
     setParticipants((current) => removeParticipant(current, id));
+  }
+
+  async function loadTrainingPrograms() {
+    setFocusState({ kind: "loading" });
+    try {
+      const response = await fetch("/api/backend/training-programs", {
+        cache: "no-store",
+        headers: { "Accept": "application/json" },
+      });
+      if (!response.ok) {
+        throw new Error("Training program request failed");
+      }
+      const programs: unknown = await response.json();
+      if (!Array.isArray(programs)) {
+        throw new Error("Training program response was invalid");
+      }
+      const activePrograms = programs.filter(
+        (p): p is TrainingProgram =>
+			isTrainingProgram(p) && p.is_active,
+      );
+      setFocusState({ kind: "loaded", programs: activePrograms, selectedId: null });
+    } catch (err) {
+      setFocusState({
+		kind: "error",
+		message:
+			err instanceof Error ? err.message : "Training program request failed",
+	  });
+    }
+  }
+
+  function handleProgramSelect(programId: TrainingProgram["id"]) {
+    setSelectedProgramId(programId);
+    setShowFocusNotes(false);
+    setFocusNotes("");
+  }
+
+  function handleProgramDeselect() {
+    setSelectedProgramId(null);
+    setShowFocusNotes(false);
+    setFocusNotes("");
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -82,6 +156,10 @@ export default function BookingRequestForm({
           full_name: joinParticipantNames(participants),
           email: data.get("email"),
           phone: data.get("phone"),
+          training_focus:
+            selectedProgramId !== null ? selectedProgramId : null,
+          training_focus_notes:
+            showFocusNotes && selectedProgramId === "other" ? focusNotes : null,
         }),
       });
       const result = await response.json();
@@ -137,7 +215,7 @@ export default function BookingRequestForm({
         })()
       : null;
   return (
-    <div className="request-box">
+    <div className="request-box" id="booking-request-form">
       <button
         className="request-close"
         type="button"
@@ -176,7 +254,9 @@ export default function BookingRequestForm({
                     await navigator.clipboard.writeText(statusLink);
                     setCopyMessage("Private status link copied.");
                   } catch {
-                    setCopyMessage("Could not copy the link. Open it and copy the address from your browser.");
+                    setCopyMessage(
+                      "Could not copy the link. Open it and copy the address from your browser.",
+                    );
                   }
                 }}
               >
@@ -215,10 +295,7 @@ export default function BookingRequestForm({
                       id={inputId}
                       value={participant.name}
                       onChange={(event) =>
-                        updateParticipantName(
-                          participant.id,
-                          event.target.value,
-                        )
+                        updateParticipantName(participant.id, event.target.value)
                       }
                       maxLength={200}
                       autoComplete="off"
@@ -258,26 +335,122 @@ export default function BookingRequestForm({
             )}
           </fieldset>
 
-          <label>
-            Email (optional)
-            <input
-              name="email"
-              type="email"
-              autoComplete="email"
-              maxLength={254}
-              disabled={request.phase === "submitting"}
-            />
-          </label>
-          <label>
-            Phone (optional)
-            <input
-              name="phone"
-              type="tel"
-              autoComplete="tel"
-              maxLength={40}
-              disabled={request.phase === "submitting"}
-            />
-          </label>
+          <fieldset className="request-contact-fields">
+            <legend>Contact details (optional)</legend>
+            <label>
+              Email
+              <input
+                name="email"
+                type="email"
+                autoComplete="email"
+                maxLength={254}
+                disabled={request.phase === "submitting"}
+              />
+            </label>
+            <label>
+              Phone
+              <input
+                name="phone"
+                type="tel"
+                autoComplete="tel"
+                maxLength={40}
+                disabled={request.phase === "submitting"}
+              />
+            </label>
+          </fieldset>
+
+          <fieldset className="request-training-programs">
+            <legend>Training program</legend>
+            {focusState.kind === "loading" && (
+              <p className="request-note">
+                Loading training programs…
+              </p>
+            )}
+            {focusState.kind === "error" && (
+              <p className="request-error" role="alert">
+                {focusState.message}
+              </p>
+            )}
+            {focusState.kind === "error" && (
+              <button type="button" className="request-training-program-deselect" onClick={loadTrainingPrograms}>
+                Try again
+              </button>
+            )}
+            {focusState.kind === "loaded" && selectedProgramId !== null ? (
+              <div className="request-training-program-selected">
+                <span>{focusState.programs.find((program) => program.id === selectedProgramId)?.name ?? "Selected program"}</span>
+                <button
+                  type="button"
+                  className="request-training-program-deselect"
+                  onClick={handleProgramDeselect}
+                  aria-label="Deselect training program"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <p className="request-note">
+                Select a training program (optional)
+              </p>
+            )}
+            {focusState.kind === "loaded" && focusState.programs.length === 0 ? (
+              <p className="request-note">No active training programs are available right now. You can still submit a request without selecting one.</p>
+            ) : focusState.kind === "loaded" && selectedProgramId === null ? (
+              <div className="request-training-program-grid">
+                {focusState.programs.map((program) => {
+					const isSelected = selectedProgramId === program.id;
+					return (
+						<label
+							key={program.id}
+							className={
+								isSelected
+									? "request-training-program-item selected"
+									: "request-training-program-item"
+							}
+						>
+							<input
+								type="radio"
+								name="training_program"
+								value={program.id}
+								checked={isSelected}
+								onChange={() => handleProgramSelect(program.id)}
+								disabled={request.phase === "submitting"}
+							/>
+							<div
+								className="request-training-program-label"
+							>
+								<strong>{program.name}</strong>
+								{program.description && (
+									<span className="request-training-program-desc">
+										{program.description}
+									</span>
+								)}
+							</div>
+						</label>
+					);
+				  })}
+              </div>
+            ) : focusState.kind !== "loaded" ? (
+              <p className="request-note">
+                Select a training program (optional)
+              </p>
+            ) : null}
+            {showFocusNotes && selectedProgramId === "other" && (
+              <div className="request-training-focus-notes">
+                <label>
+                  Notes (optional, e.g. specific goals or abilities)
+                  <textarea
+                    rows={3}
+                    cols={40}
+                    maxLength={500}
+                    value={focusNotes}
+                    onChange={(event) => setFocusNotes(event.target.value)}
+                    disabled={request.phase === "submitting"}
+                  />
+                </label>
+              </div>
+            )}
+          </fieldset>
           <p className="request-note">
             Email and phone are optional. Adding one may help the club follow up
             about your pending request, but a name is all you need to submit.

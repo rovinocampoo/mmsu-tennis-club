@@ -290,7 +290,7 @@ export default function AdminSchedule({
   const [customStart, setCustomStart] = useState("09:00");
   const [customEnd, setCustomEnd] = useState("10:00");
   const [customSlotError, setCustomSlotError] = useState("");
-  const [location, setLocation] = useState("");
+  const [location, setLocation] = useState("MMSU Tennis Courts");
   const [capacity, setCapacity] = useState("");
   const [notes, setNotes] = useState("");
   const [coachID, setCoachID] = useState("");

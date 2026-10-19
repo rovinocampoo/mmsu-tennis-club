@@ -400,6 +400,120 @@ button:disabled, input:disabled, select:disabled { cursor: not-allowed; opacity:
 .text-action { margin-top: auto; padding: 5px 0; border: 0; background: transparent; color: #286542; font-size: .8rem; font-weight: 750; cursor: pointer; }
 .text-action:hover { text-decoration: underline; text-underline-offset: 4px; }
 .published-sessions { scroll-margin-top: 24px; }
+#booking-request-form { scroll-margin-top: 24px; }
+.request-contact-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+  margin: 2px 0;
+  padding: 10px 12px 12px;
+  border: 1px solid #dbe5d8;
+  border-radius: 8px;
+  background: #fff;
+}
+.request-contact-fields legend {
+  padding: 0 6px;
+  color: var(--green);
+  font-size: .76rem;
+  font-weight: 800;
+}
+.request-box .request-contact-fields label {
+  min-width: 0;
+  font-size: .74rem;
+}
+.request-box .request-contact-fields input {
+  min-width: 0;
+}
+.request-training-programs {
+  min-width: 0;
+  margin: 2px 0;
+  padding: 12px;
+  border: 1px solid #dbe5d8;
+  border-radius: 8px;
+  background: #fff;
+}
+.request-training-programs legend {
+  padding: 0 6px;
+  color: var(--green);
+  font-size: .8rem;
+  font-weight: 800;
+}
+.request-training-program-grid {
+  display: grid;
+  max-height: 270px;
+  gap: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px 3px 2px 1px;
+}
+.request-box .request-training-program-item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid #e1e9df;
+  border-radius: 7px;
+  background: #fcfdfa;
+  cursor: pointer;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.request-box .request-training-program-item:hover,
+.request-box .request-training-program-item:focus-within {
+  border-color: #8aa891;
+  background: #f4f8f0;
+}
+.request-box .request-training-program-item input[type="radio"] {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  min-height: 18px;
+  margin: 2px 0 0;
+  padding: 0;
+  accent-color: var(--green);
+  cursor: pointer;
+}
+.request-training-program-label {
+  display: block;
+  min-width: 0;
+  color: #345442;
+  font-size: .78rem;
+  line-height: 1.35;
+}
+.request-training-program-label strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-weight: 750;
+}
+.request-training-program-desc {
+  display: block;
+  margin-top: 3px;
+  color: #6c7b70;
+  font-size: .72rem;
+  font-weight: 400;
+  line-height: 1.4;
+}
+.request-training-program-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid #bfd1bd;
+  border-radius: 7px;
+  background: #f3f8ef;
+  color: #345442;
+  font-size: .8rem;
+  font-weight: 700;
+}
+@media (max-width: 520px) {
+  .request-contact-fields { grid-template-columns: minmax(0, 1fr); }
+  .request-training-programs { padding: 10px; }
+  .request-training-program-grid { max-height: 240px; }
+  .request-box .request-training-program-item { padding: 9px; }
+}
 .schedule-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 15px; }
 .schedule-toolbar > p { margin: 0; color: var(--muted); font-size: .8rem; }
 .schedule-view-switch { display: inline-flex; gap: 4px; margin: 0; padding: 4px; border: 1px solid #dce6d7; border-radius: 999px; background: white; }
@@ -484,6 +598,36 @@ button.calendar-day.outside-month { background: #f6f8f5; }
 .admin-button.secondary:hover { background: #f0f5e9; }
 .admin-button.danger { border: 1px solid #edc9c2; border-radius: 6px; background: #fff5f3; color: #923d32; }
 .admin-button.danger:hover { background: #fae6e2; }
+
+.program-management { display: grid; gap: 16px; }
+.program-management > .availability-panel { display: grid; gap: 14px; }
+.program-management .schedule-section-heading { margin-bottom: 0; }
+.program-management .schedule-section-heading h2 { margin: 0; color: var(--green); font: 750 1.25rem Manrope, sans-serif; }
+.program-management .program-total { padding: 6px 10px; border-radius: 999px; background: #edf5e7; color: #315d3e; font-size: .72rem; font-weight: 750; white-space: nowrap; }
+.program-create-form { display: grid; gap: 12px; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcf9; }
+.program-create-form h3 { margin: 0; color: var(--green); font: 750 1rem Manrope, sans-serif; }
+.program-create-form label, .program-management-card label { display: grid; gap: 6px; color: #40594a; font-size: .77rem; font-weight: 700; }
+.program-create-form input, .program-create-form textarea, .program-management-card input, .program-management-card textarea { width: 100%; min-height: 42px; padding: 10px 12px; border: 1px solid #cfd9ce; border-radius: 6px; background: #fff; color: var(--ink); font: 400 .9rem "DM Sans", sans-serif; }
+.program-create-form textarea, .program-management-card textarea { resize: vertical; line-height: 1.5; }
+.program-create-form input:focus-visible, .program-create-form textarea:focus-visible, .program-management-card input:focus-visible, .program-management-card textarea:focus-visible { outline: 3px solid #b8d176; outline-offset: 2px; }
+.program-create-form .admin-button { justify-self: start; }
+.program-optional { color: #738076; font-size: .68rem; font-weight: 500; }
+.program-management-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.program-management-card { min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: 0 5px 16px #173d2907; }
+.program-management-card h3 { margin: 0; color: var(--green); font: 750 1rem/1.35 Manrope, sans-serif; overflow-wrap: anywhere; }
+.program-management-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.program-management-heading > div { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.program-status { display: inline-flex; padding: 4px 8px; border-radius: 999px; font-size: .64rem; font-weight: 800; }
+.program-status.active { background: #edf5e7; color: #315d3e; }
+.program-status.inactive { background: #f0f2ef; color: #67736a; }
+.program-management-description { min-height: 2.9em; margin: 12px 0; color: #66756c; font-size: .83rem; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.program-management-card form { display: grid; gap: 12px; }
+.program-management .admin-state { margin: 0; }
+@media (max-width: 700px) {
+  .program-management-list { grid-template-columns: minmax(0, 1fr); }
+  .program-management .schedule-section-heading { align-items: start; }
+  .program-create-form { padding: 15px; }
+}
 .schedule-form { gap: 14px; }
 .schedule-form label, .admin-login label, .request-box label { color: #425b49; font-size: .8rem; font-weight: 700; }
 .schedule-form input, .schedule-form select, .admin-login input, .request-box input { min-height: 43px; border: 1px solid #d5dfd4; border-radius: 6px; background: #fff; }

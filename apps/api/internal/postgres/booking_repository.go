@@ -42,7 +42,7 @@ func (r *BookingRepository) CreateRequest(ctx context.Context, request training.
 		return "", fmt.Errorf("encode booking participants: %w", err)
 	}
 	var reference string
-	err = r.db.QueryRow(ctx, `SELECT public.create_public_booking_request_with_participants_token($1::jsonb, $2::jsonb, $3, $4, $5)`, string(encodedIDs), string(encodedParticipants), nullable(request.Email), nullable(request.Phone), tokenHash).Scan(&reference)
+	err = r.db.QueryRow(ctx, `SELECT public.create_public_booking_request_with_participants_token($1::jsonb, $2::jsonb, $3, $4, $5, $6, $7)`, string(encodedIDs), string(encodedParticipants), nullable(request.Email), nullable(request.Phone), tokenHash, nullable(request.TrainingFocus), nullable(request.TrainingFocusNotes)).Scan(&reference)
 	if err != nil {
 		return "", fmt.Errorf("create public booking request: %w", err)
 	}
@@ -53,10 +53,15 @@ func (r *BookingRepository) GetPublicStatus(ctx context.Context, tokenHash []byt
 	var status training.PublicBookingStatus
 	var expired bool
 	err := r.db.QueryRow(ctx, `
-		SELECT request_reference, request_status, program_name, starts_at, ends_at, location, is_expired
-		FROM public.get_public_booking_status($1)`, tokenHash).Scan(
+		SELECT status.request_reference, status.request_status, status.program_name,
+		       status.starts_at, status.ends_at, status.location, status.is_expired,
+		       COALESCE(status.training_focus, ''), COALESCE(status.training_focus_notes, ''),
+		       COALESCE(public.get_training_program_name(status.training_focus), '')
+		FROM public.get_public_booking_status($1) AS status
+		`, tokenHash).Scan(
 		&status.RequestReference, &status.Status, &status.ProgramName,
 		&status.StartsAt, &status.EndsAt, &status.Location, &expired,
+		&status.TrainingFocus, &status.TrainingFocusNotes, &status.TrainingProgramName,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return training.PublicBookingStatus{}, training.ErrBookingStatusNotFound
@@ -71,7 +76,19 @@ func (r *BookingRepository) GetPublicStatus(ctx context.Context, tokenHash []byt
 }
 
 func (r *BookingRepository) ListPendingRequests(ctx context.Context) ([]training.BookingRequestRecord, error) {
-	rows, err := r.db.Query(ctx, `SELECT id, session_id, full_name, email, phone, status, created_at, starts_at, ends_at, location, session_status FROM public.list_pending_booking_requests_with_slots()`)
+	rows, err := r.db.Query(ctx, `
+		SELECT requests.id, requests.session_id, requests.full_name, requests.email, requests.phone,
+		       requests.status, requests.created_at, requests.starts_at, requests.ends_at,
+		       requests.location, requests.session_status,
+		       COALESCE(requests.training_focus, ''), COALESCE(requests.training_focus_notes, ''),
+	       COALESCE(selected_program.name, '')
+		FROM public.list_pending_booking_requests_with_slots() AS requests
+		LEFT JOIN LATERAL (
+		    SELECT program.name
+		    FROM public.admin_list_training_program_catalog() AS program
+		    WHERE program.id::text = requests.training_focus
+		    LIMIT 1
+		) AS selected_program ON true`)
 	if err != nil {
 		return nil, fmt.Errorf("list pending booking requests: %w", err)
 	}
@@ -79,7 +96,7 @@ func (r *BookingRepository) ListPendingRequests(ctx context.Context) ([]training
 	result := make([]training.BookingRequestRecord, 0)
 	for rows.Next() {
 		var row training.BookingRequestRecord
-		if err := rows.Scan(&row.ID, &row.SessionID, &row.FullName, &row.Email, &row.Phone, &row.Status, &row.CreatedAt, &row.StartsAt, &row.EndsAt, &row.Location, &row.SessionStatus); err != nil {
+		if err := rows.Scan(&row.ID, &row.SessionID, &row.FullName, &row.Email, &row.Phone, &row.Status, &row.CreatedAt, &row.StartsAt, &row.EndsAt, &row.Location, &row.SessionStatus, &row.TrainingFocus, &row.TrainingFocusNotes, &row.TrainingProgramName); err != nil {
 			return nil, fmt.Errorf("scan pending booking request: %w", err)
 		}
 		result = append(result, row)
@@ -254,6 +271,42 @@ func (r *BookingRepository) ListAdminTrainingPrograms(ctx context.Context) ([]tr
 		return nil, fmt.Errorf("read admin training programs: %w", err)
 	}
 	return result, nil
+}
+
+func (r *BookingRepository) ListAdminTrainingProgramCatalog(ctx context.Context) ([]training.TrainingProgram, error) {
+	rows, err := r.db.Query(ctx, `SELECT id, name, description, is_active FROM public.admin_list_training_program_catalog()`)
+	if err != nil {
+		return nil, fmt.Errorf("list admin training program catalog: %w", err)
+	}
+	defer rows.Close()
+	result := make([]training.TrainingProgram, 0)
+	for rows.Next() {
+		var program training.TrainingProgram
+		if err := rows.Scan(&program.ID, &program.Name, &program.Description, &program.IsActive); err != nil {
+			return nil, fmt.Errorf("scan admin training program catalog: %w", err)
+		}
+		result = append(result, program)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read admin training program catalog: %w", err)
+	}
+	return result, nil
+}
+
+func (r *BookingRepository) CreateAdminTrainingProgram(ctx context.Context, name, description string) (string, error) {
+	var id string
+	if err := r.db.QueryRow(ctx, `SELECT public.admin_create_training_program($1, $2)::text`, name, description).Scan(&id); err != nil {
+		return "", fmt.Errorf("create admin training program: %w", err)
+	}
+	return id, nil
+}
+
+func (r *BookingRepository) UpdateAdminTrainingProgram(ctx context.Context, id, name, description string, isActive bool) (bool, error) {
+	var updated bool
+	if err := r.db.QueryRow(ctx, `SELECT public.admin_update_training_program($1::uuid, $2, $3, $4)`, id, name, description, isActive).Scan(&updated); err != nil {
+		return false, fmt.Errorf("update admin training program: %w", err)
+	}
+	return updated, nil
 }
 
 func (r *BookingRepository) ListAdminTrainingSessions(ctx context.Context) ([]training.AdminSessionRecord, error) {

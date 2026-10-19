@@ -6,6 +6,7 @@ const sessionId = "11111111-1111-4111-8111-111111111111";
 
 test("allows coach portal and admin scheduling API methods", () => {
   for (const [method, path] of [
+    ["GET", ["training-programs"]],
     ["GET", ["coach", "schedule"]],
     ["GET", ["coach", "coaches"]],
     ["GET", ["coach", "sessions"]],
@@ -14,6 +15,9 @@ test("allows coach portal and admin scheduling API methods", () => {
     ["POST", ["admin", "coaches"]],
     ["PATCH", ["admin", "coaches", sessionId]],
     ["GET", ["admin", "training-programs"]],
+    ["GET", ["admin", "training-program-catalog"]],
+    ["POST", ["admin", "training-program-catalog"]],
+    ["PATCH", ["admin", "training-program-catalog", sessionId]],
     ["GET", ["admin", "training-sessions"]],
     ["POST", ["admin", "training-sessions"]],
     ["POST", ["admin", "training-sessions", "batch"]],
@@ -31,6 +35,7 @@ test("allows coach portal and admin scheduling API methods", () => {
 });
 
 test("keeps the backend proxy method and identifier allowlist narrow", () => {
+  assert.equal(isBackendRouteAllowed("POST", ["training-programs"]), false);
   assert.equal(isBackendRouteAllowed("PUT", ["admin", "training-sessions"]), false);
   assert.equal(isBackendRouteAllowed("PUT", ["admin", "training-sessions", "not-a-uuid"]), false);
   assert.equal(isBackendRouteAllowed("DELETE", ["admin", "training-sessions", sessionId]), false);
@@ -44,6 +49,8 @@ test("keeps the backend proxy method and identifier allowlist narrow", () => {
   assert.equal(isBackendRouteAllowed("POST", ["coach", "availability"]), false);
   assert.equal(isBackendRouteAllowed("DELETE", ["coach", "availability", sessionId]), false);
   assert.equal(isBackendRouteAllowed("POST", ["admin", "coaches", sessionId]), false);
+  assert.equal(isBackendRouteAllowed("PATCH", ["admin", "training-program-catalog", "not-a-uuid"]), false);
+  assert.equal(isBackendRouteAllowed("DELETE", ["admin", "training-program-catalog", sessionId]), false);
   assert.equal(isBackendRouteAllowed("PATCH", ["admin", "coaches", "not-a-uuid"]), false);
   assert.equal(isBackendRouteAllowed("DELETE", ["admin", "coaches", sessionId]), false);
   assert.equal(isBackendRouteAllowed("GET", ["feedback-submissions"]), false);
