@@ -65,13 +65,13 @@ export const faqSections: FaqSection[] = [
       {
         question: "Is there a separate non-member lighting fee?",
         answer: [
-          "No separate non-member lighting fee has been published by the club. The confirmed non-member charge is the ₱50.00 per person per hour court fee.",
+          "A non-member light fee is ₱50.00 per person per hour, paid on the spot..",
         ],
       },
       {
         question: "Which members play free?",
         answer: [
-          "MMSU employees, students, and varsity members have free court and lighting fees, according to the club.",
+          "MMSU employees, students, and varsity members have free court and lighting fees.",
         ],
       },
     ],
@@ -103,7 +103,7 @@ export const faqSections: FaqSection[] = [
         question: "Do you publish coach schedules or training prices?",
         answer: [
           "The club does not publish coach names, training prices, or package tiers here. Coach availability is managed internally by the club.",
-          "For questions about training, contact the club through the Suggestions & Feedback page.",
+          "For questions about training, contact the club through our socials or the suggestion page.",
         ],
       },
     ],
@@ -128,7 +128,7 @@ export const faqSections: FaqSection[] = [
       {
         question: "What is the cancellation policy?",
         answer: [
-          "The club has not published a cancellation or refund policy. For cancellations or schedule changes, contact the club through the Suggestions & Feedback page.",
+          "The club has not published a cancellation or refund policy. For cancellations or schedule changes, contact the club through our socials.",
         ],
       },
     ],

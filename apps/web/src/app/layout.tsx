@@ -4,6 +4,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "MMSU Tennis Club",
   description: "The official web home of the MMSU Tennis Club.",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({
