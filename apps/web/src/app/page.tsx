@@ -24,12 +24,19 @@ export default function Home() {
           <Link href="#how-it-works">How it works</Link>
           <Link href="/faq">FAQ</Link>
           <Link href="/suggestions">Suggestions</Link>
-          <Link className="home-nav-cta" href="/training">
-            Training schedule
-            <span aria-hidden="true">
-              <ArrowUpRight size={16} strokeWidth={2} />
-            </span>
-          </Link>
+          <details className="home-mobile-menu">
+            <summary>
+              <span className="home-menu-icon" aria-hidden="true"><i /><i /><i /></span>
+              <span>Menu</span>
+            </summary>
+            <div className="home-mobile-menu-panel">
+              <Link href="/training">Training</Link>
+              <Link href="/faq">FAQ</Link>
+              <Link href="/suggestions">Suggestions &amp; feedback</Link>
+              <Link href="/coach">Coach portal</Link>
+              <Link href="/admin">Admin portal</Link>
+            </div>
+          </details>
         </nav>
       </header>
 

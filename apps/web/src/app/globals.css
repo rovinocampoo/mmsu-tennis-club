@@ -1398,6 +1398,51 @@ button.calendar-day.outside-month { background: #f6f8f5; }
   color: #fff;
 }
 
+.home-mobile-menu { display: none; position: relative; }
+.home-mobile-menu summary {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 13px;
+  border: 1px solid #d7e0d3;
+  border-radius: 8px;
+  background: #fff;
+  color: #173e2b;
+  font-size: .82rem;
+  font-weight: 750;
+  cursor: pointer;
+  list-style: none;
+}
+.home-mobile-menu summary::-webkit-details-marker { display: none; }
+.home-mobile-menu summary:focus-visible { outline: 3px solid #8aa83d; outline-offset: 3px; }
+.home-menu-icon { display: grid; width: 18px; gap: 4px; }
+.home-menu-icon i { display: block; height: 2px; border-radius: 2px; background: currentColor; }
+.home-mobile-menu-panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 10px);
+  right: 0;
+  display: grid;
+  width: min(280px, calc(100vw - 32px));
+  gap: 3px;
+  padding: 7px;
+  border: 1px solid #e0e7dc;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 16px 36px #102c1f24;
+}
+.home-nav .home-mobile-menu-panel a {
+  display: flex;
+  min-height: 45px;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 6px;
+  color: #365642;
+  font-size: .85rem;
+}
+.home-nav .home-mobile-menu-panel a:hover { background: #f0f5e9; color: #123d2b; text-decoration: none; }
+
 .home-hero {
   position: relative;
   isolation: isolate;
@@ -2065,19 +2110,12 @@ button.calendar-day.outside-month { background: #f6f8f5; }
   }
 
   .home-nav {
-    gap: 14px;
+    gap: 0;
   }
 
-  .home-nav > a:not(.home-nav-cta) {
-    display: none;
-  }
-
-  .home-nav .home-nav-cta {
-    min-height: 39px;
-    gap: 8px;
-    padding-inline: 11px;
-    font-size: 0.73rem;
-  }
+  .home-nav > a { display: none; }
+  .home-nav .home-mobile-menu { display: block; }
+  .home-mobile-menu[open] summary { border-color: #b7c9b0; background: #f2f7ed; }
 
   .home-hero {
     min-height: 690px;
