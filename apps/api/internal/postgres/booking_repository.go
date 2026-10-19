@@ -333,7 +333,8 @@ func (r *BookingRepository) ListApprovedClients(ctx context.Context) ([]training
 	rows, err := r.db.Query(ctx, `
 		SELECT booking_id, player_id, player_name, player_email, player_phone,
 		       session_id, program_name, starts_at, ends_at, location, capacity,
-		       assigned_coach_id, assigned_coach_name, booking_created_at, participant_names
+		       assigned_coach_id, assigned_coach_name, booking_created_at, participant_names,
+		       selected_training_program_name
 		FROM public.admin_list_approved_clients()
 	`)
 	if err != nil {
@@ -361,6 +362,7 @@ func (r *BookingRepository) ListApprovedClients(ctx context.Context) ([]training
 			&client.AssignedCoachName,
 			&client.BookingCreatedAt,
 			&participantNames,
+			&client.SelectedTrainingProgramName,
 		); err != nil {
 			return nil, fmt.Errorf("scan approved client: %w", err)
 		}

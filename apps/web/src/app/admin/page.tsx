@@ -949,9 +949,10 @@ function RequestCard({
         )}{" "}
         · {row.location} · {row.session_status}
       </p>
-      {row.training_program_name && (
-        <p><strong>Selected training program:</strong> {row.training_program_name}</p>
-      )}
+      <p>
+        <strong>Participant-selected training program:</strong>{" "}
+        {row.training_program_name || "None selected"}
+      </p>
       <label>
         Search existing players
         <input

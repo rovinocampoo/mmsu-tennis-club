@@ -189,21 +189,22 @@ type AdminSessionRecord struct {
 }
 
 type ApprovedClientRecord struct {
-	BookingID         string    `json:"booking_id"`
-	PlayerID          string    `json:"player_id"`
-	PlayerName        string    `json:"player_name"`
-	PlayerEmail       *string   `json:"player_email"`
-	PlayerPhone       *string   `json:"player_phone"`
-	SessionID         string    `json:"session_id"`
-	ProgramName       string    `json:"program_name"`
-	StartsAt          time.Time `json:"starts_at"`
-	EndsAt            time.Time `json:"ends_at"`
-	Location          string    `json:"location"`
-	Capacity          *int      `json:"capacity"`
-	AssignedCoachID   *string   `json:"assigned_coach_id"`
-	AssignedCoachName *string   `json:"assigned_coach_name"`
-	BookingCreatedAt  time.Time `json:"booking_created_at"`
-	ParticipantNames  []string  `json:"participant_names"`
+	BookingID                   string    `json:"booking_id"`
+	PlayerID                    string    `json:"player_id"`
+	PlayerName                  string    `json:"player_name"`
+	PlayerEmail                 *string   `json:"player_email"`
+	PlayerPhone                 *string   `json:"player_phone"`
+	SessionID                   string    `json:"session_id"`
+	ProgramName                 string    `json:"program_name"`
+	SelectedTrainingProgramName string    `json:"selected_training_program_name"`
+	StartsAt                    time.Time `json:"starts_at"`
+	EndsAt                      time.Time `json:"ends_at"`
+	Location                    string    `json:"location"`
+	Capacity                    *int      `json:"capacity"`
+	AssignedCoachID             *string   `json:"assigned_coach_id"`
+	AssignedCoachName           *string   `json:"assigned_coach_name"`
+	BookingCreatedAt            time.Time `json:"booking_created_at"`
+	ParticipantNames            []string  `json:"participant_names"`
 }
 
 type AssignedTrainingSession struct {

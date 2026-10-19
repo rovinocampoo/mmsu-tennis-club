@@ -15,6 +15,7 @@ type ApprovedClient = {
   player_phone: string | null;
   session_id: string;
   program_name: string;
+  selected_training_program_name: string;
   starts_at: string;
   ends_at: string;
   location: string;
@@ -147,8 +148,13 @@ function BookingCard({ record }: { record: ApprovedClient }) {
 
       <div className={`approved-client-fields ${styles.bookingFields}`}>
         <div>
-          <span>Training program</span>
+          <span>Scheduled session program</span>
           <strong>{record.program_name}</strong>
+        </div>
+
+        <div>
+          <span>Participant-selected program</span>
+          <strong>{record.selected_training_program_name || "None selected"}</strong>
         </div>
 
         <div>

@@ -496,16 +496,17 @@ func TestAdminApprovedClientsReturnsRecords(t *testing.T) {
 	repo := &bookingStub{
 		approvedClients: []training.ApprovedClientRecord{
 			{
-				BookingID:        "booking-1",
-				PlayerID:         "player-1",
-				PlayerName:       "Alex Player",
-				PlayerEmail:      &email,
-				SessionID:        "session-1",
-				ProgramName:      "Junior Training",
-				StartsAt:         startsAt,
-				EndsAt:           startsAt.Add(time.Hour),
-				Location:         "MMSU Courts",
-				BookingCreatedAt: startsAt.Add(-24 * time.Hour),
+				BookingID:                   "booking-1",
+				PlayerID:                    "player-1",
+				PlayerName:                  "Alex Player",
+				PlayerEmail:                 &email,
+				SessionID:                   "session-1",
+				ProgramName:                 "Junior Training",
+				SelectedTrainingProgramName: "Advanced Tennis Training",
+				StartsAt:                    startsAt,
+				EndsAt:                      startsAt.Add(time.Hour),
+				Location:                    "MMSU Courts",
+				BookingCreatedAt:            startsAt.Add(-24 * time.Hour),
 			},
 		},
 	}
@@ -529,6 +530,7 @@ func TestAdminApprovedClientsReturnsRecords(t *testing.T) {
 	}
 	if response.Clients[0].PlayerName != "Alex Player" ||
 		response.Clients[0].ProgramName != "Junior Training" ||
+		response.Clients[0].SelectedTrainingProgramName != "Advanced Tennis Training" ||
 		response.Clients[0].BookingID != "booking-1" {
 		t.Fatalf("unexpected client record: %#v", response.Clients[0])
 	}
