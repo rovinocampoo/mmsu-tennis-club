@@ -21,6 +21,7 @@ type ApprovedClient = {
   assigned_coach_id: string | null;
   assigned_coach_name: string | null;
   booking_created_at: string;
+  participant_names: string[] | null;
 };
 
 type AuthStatus = "checking" | "authenticated" | "signed_out" | "unavailable";
@@ -167,6 +168,15 @@ function BookingCard({ record }: { record: ApprovedClient }) {
         <div>
           <span>Assigned coach</span>
           <strong>{record.assigned_coach_name || "Not assigned"}</strong>
+        </div>
+
+        <div>
+          <span>Participants</span>
+          <strong>
+            {record.participant_names && record.participant_names.length > 0
+              ? record.participant_names.join(", ")
+              : record.player_name}
+          </strong>
         </div>
 
         <div>
@@ -519,6 +529,8 @@ export default function ApprovedClientsPage() {
 
         <nav className="portal-nav" aria-label="Club navigation">
           <Link href="/admin">Admin workspace</Link>
+          <Link href="/admin/coaches">Coaches</Link>
+          <Link href="/admin/feedback">Feedback</Link>
           <Link href="/training">Public schedule</Link>
         </nav>
       </header>

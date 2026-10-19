@@ -14,89 +14,6 @@ import (
 	"github.com/rovinocampoo/mmsu-tennis-club/apps/api/internal/training"
 )
 
-type coachSubmitAvailabilityRequest struct {
-	CoachName string    `json:"coach_name"`
-	StartsAt  time.Time `json:"starts_at"`
-	EndsAt    time.Time `json:"ends_at"`
-	Notes     string    `json:"notes"`
-}
-
-func CoachSubmitAvailability(repo training.BookingRepository, logger *log.Logger) http.HandlerFunc {
-	if logger == nil {
-		logger = log.Default()
-	}
-	return func(w http.ResponseWriter, r *http.Request) {
-		coachID := adminauth.UserID(r.Context())
-		if coachID == "" {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
-			return
-		}
-		if repo == nil {
-			writeError(w, http.StatusServiceUnavailable, "scheduling service is temporarily unavailable")
-			return
-		}
-
-		var req coachSubmitAvailabilityRequest
-		if !decodeJSON(w, r, &req, 8192) {
-			return
-		}
-		req.CoachName = strings.TrimSpace(req.CoachName)
-		req.Notes = strings.TrimSpace(req.Notes)
-		if req.CoachName == "" || len(req.CoachName) > 100 || len(req.Notes) > 2000 {
-			writeError(w, http.StatusBadRequest, "coach name and notes are invalid")
-			return
-		}
-		if req.StartsAt.IsZero() || req.EndsAt.IsZero() || !req.StartsAt.Before(req.EndsAt) {
-			writeError(w, http.StatusBadRequest, "start time must be before end time")
-			return
-		}
-
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		defer cancel()
-
-		id, err := repo.SubmitCoachAvailability(ctx, coachID, req.CoachName, req.StartsAt, req.EndsAt, req.Notes)
-		if err != nil {
-			logger.Printf("submit coach availability failed: %v", err)
-			writeError(w, http.StatusInternalServerError, "could not submit availability")
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(map[string]string{"id": id})
-	}
-}
-
-func CoachListAvailability(repo training.BookingRepository, logger *log.Logger) http.HandlerFunc {
-	if logger == nil {
-		logger = log.Default()
-	}
-	return func(w http.ResponseWriter, r *http.Request) {
-		coachID := adminauth.UserID(r.Context())
-		if coachID == "" {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
-			return
-		}
-		if repo == nil {
-			writeError(w, http.StatusServiceUnavailable, "scheduling service is temporarily unavailable")
-			return
-		}
-
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		defer cancel()
-
-		items, err := repo.ListCoachAvailability(ctx, coachID)
-		if err != nil {
-			logger.Printf("list coach availability failed: %v", err)
-			writeError(w, http.StatusInternalServerError, "could not load coach availability")
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"availability": items})
-	}
-}
-
 func CoachListAssignedSessions(repo training.BookingRepository, logger *log.Logger) http.HandlerFunc {
 	if logger == nil {
 		logger = log.Default()
@@ -124,40 +41,6 @@ func CoachListAssignedSessions(repo training.BookingRepository, logger *log.Logg
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"sessions": sessions})
-	}
-}
-
-func CoachDeleteAvailability(repo training.BookingRepository, logger *log.Logger) http.HandlerFunc {
-	if logger == nil {
-		logger = log.Default()
-	}
-	return func(w http.ResponseWriter, r *http.Request) {
-		coachID := adminauth.UserID(r.Context())
-		if coachID == "" {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
-			return
-		}
-		id := r.PathValue("id")
-		if !validUUID(id) {
-			writeError(w, http.StatusBadRequest, "availability id is invalid")
-			return
-		}
-		if repo == nil {
-			writeError(w, http.StatusServiceUnavailable, "scheduling service is temporarily unavailable")
-			return
-		}
-
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		defer cancel()
-
-		if err := repo.DeleteCoachAvailability(ctx, id, coachID); err != nil {
-			logger.Printf("delete coach availability failed: %v", err)
-			writeError(w, http.StatusInternalServerError, "could not delete availability")
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]bool{"success": true})
 	}
 }
 
@@ -362,6 +245,70 @@ func AdminCreateTrainingSessionsBatch(repo training.BookingRepository, logger *l
 			return
 		}
 		writeJSON(w, http.StatusCreated, map[string]any{"ids": ids, "created": len(ids)})
+	}
+}
+
+var manilaLocation = time.FixedZone("Asia/Manila", 8*60*60)
+
+type sessionPublishRepository interface {
+	PublishTrainingSessions(context.Context, time.Time, time.Time) (training.PublicationResult, error)
+}
+
+// AdminPublishTrainingSessions atomically publishes every hidden, still-open
+// session inside a confirmed Manila day or month. The window is derived
+// server-side from the selected date so the client cannot widen it, and the
+// database re-checks eligibility so closed sessions are not reopened and
+// cancelled sessions are not reactivated.
+func AdminPublishTrainingSessions(repo training.BookingRepository, logger *log.Logger) http.HandlerFunc {
+	if logger == nil {
+		logger = log.Default()
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if repo == nil {
+			writeError(w, http.StatusServiceUnavailable, "scheduling service is temporarily unavailable")
+			return
+		}
+		publishRepo, ok := any(repo).(sessionPublishRepository)
+		if !ok {
+			writeError(w, http.StatusServiceUnavailable, "bulk publication is temporarily unavailable")
+			return
+		}
+		var req struct {
+			Scope string `json:"scope"`
+			Date  string `json:"date"`
+		}
+		if !decodeJSON(w, r, &req, 4096) {
+			return
+		}
+		req.Scope = strings.ToLower(strings.TrimSpace(req.Scope))
+		req.Date = strings.TrimSpace(req.Date)
+		if req.Scope != "day" && req.Scope != "month" {
+			writeError(w, http.StatusBadRequest, "scope must be day or month")
+			return
+		}
+		day, err := time.ParseInLocation("2006-01-02", req.Date, manilaLocation)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "date must be a valid YYYY-MM-DD value")
+			return
+		}
+		var startsAt, endsAt time.Time
+		if req.Scope == "day" {
+			startsAt = day
+			endsAt = day.AddDate(0, 0, 1)
+		} else {
+			startsAt = time.Date(day.Year(), day.Month(), 1, 0, 0, 0, 0, manilaLocation)
+			endsAt = startsAt.AddDate(0, 1, 0)
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		result, err := publishRepo.PublishTrainingSessions(ctx, startsAt, endsAt)
+		if err != nil {
+			writeSchedulingRepositoryError(w, logger, "admin publish training sessions", err)
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
 	}
 }
 

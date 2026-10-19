@@ -22,6 +22,8 @@ export default function Home() {
         <nav className="home-nav" aria-label="Main navigation">
           <Link href="#club">The club</Link>
           <Link href="#how-it-works">How it works</Link>
+          <Link href="/faq">FAQ</Link>
+          <Link href="/suggestions">Suggestions</Link>
           <Link className="home-nav-cta" href="/training">
             Training schedule
             <span aria-hidden="true">
@@ -272,6 +274,8 @@ export default function Home() {
 
         <nav aria-label="Footer navigation">
           <Link href="/training">Training</Link>
+          <Link href="/faq">FAQ</Link>
+          <Link href="/suggestions">Suggestions &amp; feedback</Link>
           <Link href="/coach">Coach portal</Link>
           <Link href="/admin">Club admin</Link>
         </nav>

@@ -21,11 +21,48 @@ import (
 )
 
 type bookingRequestInput struct {
-	SessionID  string   `json:"session_id"`
-	SessionIDs []string `json:"session_ids"`
-	FullName   string   `json:"full_name"`
-	Email      string   `json:"email"`
-	Phone      string   `json:"phone"`
+	SessionID    string   `json:"session_id"`
+	SessionIDs   []string `json:"session_ids"`
+	FullName     string   `json:"full_name"`
+	Participants []string `json:"participants"`
+	Email        string   `json:"email"`
+	Phone        string   `json:"phone"`
+}
+
+// maxBookingParticipants bounds the per-request participant list. The joined
+// names must also fit the 200-character booking_requests.full_name column.
+const maxBookingParticipants = 20
+
+// normalizeParticipants prefers the explicit participant list and falls back to
+// the single full_name still sent by older clients.
+func normalizeParticipants(participants []string, fullName string) []string {
+	names := make([]string, 0, len(participants))
+	for _, name := range participants {
+		if trimmed := strings.TrimSpace(name); trimmed != "" {
+			names = append(names, trimmed)
+		}
+	}
+	if len(names) == 0 {
+		names = append(names, strings.TrimSpace(fullName))
+	}
+	return names
+}
+
+func validateParticipants(participants []string) string {
+	if len(participants) < 1 || len(participants) > maxBookingParticipants {
+		return "provide between 1 and 20 participant names"
+	}
+	total := 0
+	for _, name := range participants {
+		if name == "" || !utf8.ValidString(name) || utf8.RuneCountInString(name) > 200 {
+			return "each participant name must be 1 to 200 characters"
+		}
+		total += utf8.RuneCountInString(name)
+	}
+	if total+2*(len(participants)-1) > 200 {
+		return "participant names are too long; use fewer or shorter names"
+	}
+	return ""
 }
 
 type bookingRequestAccepted struct {
@@ -54,10 +91,17 @@ func BookingRequest(repo training.BookingRepository, logger interface{ Printf(st
 			writeBookingError(w, http.StatusBadRequest, "provide either session_id or matching session_ids")
 			return
 		}
-		if len(input.SessionIDs) < 1 || len(input.SessionIDs) > 8 || input.FullName == "" || !utf8.ValidString(input.FullName) || utf8.RuneCountInString(input.FullName) > 200 {
-			writeBookingError(w, http.StatusBadRequest, "select 1 to 8 session slots and provide a full_name of 1 to 200 characters")
+		if len(input.SessionIDs) < 1 || len(input.SessionIDs) > 8 {
+			writeBookingError(w, http.StatusBadRequest, "select 1 to 8 session slots")
 			return
 		}
+		participants := normalizeParticipants(input.Participants, input.FullName)
+		if message := validateParticipants(participants); message != "" {
+			writeBookingError(w, http.StatusBadRequest, message)
+			return
+		}
+		input.Participants = participants
+		input.FullName = strings.Join(participants, ", ")
 		seenSessionIDs := make(map[string]struct{}, len(input.SessionIDs))
 		for index, id := range input.SessionIDs {
 			id = strings.ToLower(strings.TrimSpace(id))
@@ -73,10 +117,8 @@ func BookingRequest(repo training.BookingRepository, logger interface{ Printf(st
 			input.SessionIDs[index] = id
 		}
 		input.SessionID = input.SessionIDs[0]
-		if input.Email == "" && input.Phone == "" {
-			writeBookingError(w, http.StatusBadRequest, "provide an email address or phone number")
-			return
-		}
+		// Email and phone are independently optional; a request may contain only
+		// a full name. When a value is supplied it must still be well formed.
 		if input.Email != "" {
 			parsed, err := mail.ParseAddress(input.Email)
 			if err != nil || parsed.Address != input.Email || len(input.Email) > 254 {
@@ -102,7 +144,7 @@ func BookingRequest(repo training.BookingRepository, logger interface{ Printf(st
 		tokenHash := sha256.Sum256(tokenBytes[:])
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		reference, err := repo.CreateRequest(ctx, training.BookingRequest{SessionID: input.SessionID, SessionIDs: input.SessionIDs, FullName: input.FullName, Email: input.Email, Phone: input.Phone}, tokenHash[:])
+		reference, err := repo.CreateRequest(ctx, training.BookingRequest{SessionID: input.SessionID, SessionIDs: input.SessionIDs, FullName: input.FullName, Participants: input.Participants, Email: input.Email, Phone: input.Phone}, tokenHash[:])
 		if err != nil {
 			writeBookingRepoError(w, logger, "create booking request", err)
 			return
@@ -199,7 +241,6 @@ func AdminBookingRequests(repo training.BookingRepository, logger interface{ Pri
 	}
 }
 
-
 func AdminApprovedClients(repo training.BookingRepository, logger interface{ Printf(string, ...any) }) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if repo == nil {
@@ -223,7 +264,6 @@ func AdminApprovedClients(repo training.BookingRepository, logger interface{ Pri
 		writeJSON(w, http.StatusOK, map[string]any{"clients": clients})
 	}
 }
-
 
 func AdminPlayerSearch(repo training.BookingRepository, logger interface{ Printf(string, ...any) }) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -255,17 +295,42 @@ type approveRequestInput struct {
 	CreateNew bool   `json:"create_new"`
 }
 
-type CalendarSyncer interface { IsConfigured() bool; Sync(context.Context, training.CalendarEvent) error }
-type calendarEventRepository interface { GetBookingCalendarEvent(context.Context, string) (training.CalendarEvent, error) }
-type calendarSyncOutcome struct { Status string `json:"status"`; Message string `json:"message"`; Retryable bool `json:"retryable"` }
+type CalendarSyncer interface {
+	IsConfigured() bool
+	Sync(context.Context, training.CalendarEvent) error
+}
+type calendarEventRepository interface {
+	GetBookingCalendarEvent(context.Context, string) (training.CalendarEvent, error)
+}
+type calendarSyncOutcome struct {
+	Status    string `json:"status"`
+	Message   string `json:"message"`
+	Retryable bool   `json:"retryable"`
+}
+
 func syncCalendar(ctx context.Context, repo training.BookingRepository, syncer CalendarSyncer, id string, logger interface{ Printf(string, ...any) }) calendarSyncOutcome {
-	if syncer == nil || !syncer.IsConfigured() { return calendarSyncOutcome{"not_configured", "Google Calendar is not configured; the booking is still approved.", false} }
-	r, ok := repo.(calendarEventRepository); if !ok { return calendarSyncOutcome{"failed", "Calendar booking details could not be loaded. Retry the sync.", true} }
-	e, err := r.GetBookingCalendarEvent(ctx, id); if err == nil { err = syncer.Sync(ctx, e) }
-	if err != nil { if logger != nil { logger.Printf("Google Calendar sync failed for booking request %s: %v", id, err) }; return calendarSyncOutcome{"failed", "Booking approved, but Google Calendar sync failed. You can retry.", true} }
+	if syncer == nil || !syncer.IsConfigured() {
+		return calendarSyncOutcome{"not_configured", "Google Calendar is not configured; the booking is still approved.", false}
+	}
+	r, ok := repo.(calendarEventRepository)
+	if !ok {
+		return calendarSyncOutcome{"failed", "Calendar booking details could not be loaded. Retry the sync.", true}
+	}
+	e, err := r.GetBookingCalendarEvent(ctx, id)
+	if err == nil {
+		err = syncer.Sync(ctx, e)
+	}
+	if err != nil {
+		if logger != nil {
+			logger.Printf("Google Calendar sync failed for booking request %s: %v", id, err)
+		}
+		return calendarSyncOutcome{"failed", "Booking approved, but Google Calendar sync failed. You can retry.", true}
+	}
 	return calendarSyncOutcome{"synced", "Booking successfully added to Google Calendar.", false}
 }
-func AdminApproveBookingRequest(repo training.BookingRepository, logger interface{ Printf(string, ...any) }, notifiers ...notifications.ApprovalNotifier) http.HandlerFunc { return AdminApproveBookingRequestWithCalendar(repo, logger, nil, notifiers...) }
+func AdminApproveBookingRequest(repo training.BookingRepository, logger interface{ Printf(string, ...any) }, notifiers ...notifications.ApprovalNotifier) http.HandlerFunc {
+	return AdminApproveBookingRequestWithCalendar(repo, logger, nil, notifiers...)
+}
 func AdminApproveBookingRequestWithCalendar(repo training.BookingRepository, logger interface{ Printf(string, ...any) }, syncer CalendarSyncer, notifiers ...notifications.ApprovalNotifier) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if repo == nil {
@@ -311,7 +376,7 @@ func AdminApproveBookingRequestWithCalendar(repo training.BookingRepository, log
 			notificationCancel()
 		}
 		writeJSON(w, http.StatusOK, struct {
-			Status string `json:"status"`
+			Status       string              `json:"status"`
 			CalendarSync calendarSyncOutcome `json:"calendar_sync"`
 			notifications.Result
 		}{Status: "approved", CalendarSync: calendarResult, Result: result})
@@ -319,11 +384,16 @@ func AdminApproveBookingRequestWithCalendar(repo training.BookingRepository, log
 }
 
 func AdminRetryBookingCalendarSync(repo training.BookingRepository, syncer CalendarSyncer, logger interface{ Printf(string, ...any) }) http.HandlerFunc {
- return func(w http.ResponseWriter, r *http.Request) {
-  id := strings.ToLower(r.PathValue("id")); if !validUUID(id) { writeBookingError(w, http.StatusBadRequest, "request id is invalid"); return }
-  ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 12*time.Second); defer cancel()
-  writeJSON(w, http.StatusOK, syncCalendar(ctx, repo, syncer, id, logger))
- }
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := strings.ToLower(r.PathValue("id"))
+		if !validUUID(id) {
+			writeBookingError(w, http.StatusBadRequest, "request id is invalid")
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 12*time.Second)
+		defer cancel()
+		writeJSON(w, http.StatusOK, syncCalendar(ctx, repo, syncer, id, logger))
+	}
 }
 
 func AdminRetryBookingApprovalNotification(notifier notifications.ApprovalNotifier, logger interface{ Printf(string, ...any) }) http.HandlerFunc {

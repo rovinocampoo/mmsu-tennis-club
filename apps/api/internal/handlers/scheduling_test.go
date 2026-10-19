@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,6 +28,16 @@ type schedulingRepoStub struct {
 	createdBatch        []training.TrainingSessionCreateInput
 	editedSessionID     string
 	editedSession       training.TrainingSessionEditInput
+	coaches             []training.Coach
+	coachDirectory      []training.CoachDirectoryEntry
+	coachSchedule       []training.CoachScheduleSession
+	createdCoachName    string
+	updatedCoachID      string
+	updatedCoachActive  bool
+	publishedStart      time.Time
+	publishedEnd        time.Time
+	publishCalls        int
+	publicationResult   training.PublicationResult
 }
 
 const (
@@ -34,7 +45,31 @@ const (
 	testAvailabilityID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 	testProgramID      = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 	testSessionID      = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+	testCoachRecordID  = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 )
+
+func (s *schedulingRepoStub) ListCoaches(context.Context) ([]training.Coach, error) {
+	return s.coaches, nil
+}
+
+func (s *schedulingRepoStub) CreateCoach(_ context.Context, fullName, _, _, _ string) (string, error) {
+	s.createdCoachName = fullName
+	return testCoachRecordID, nil
+}
+
+func (s *schedulingRepoStub) UpdateCoach(_ context.Context, id, _, _, _, _ string, isActive bool) error {
+	s.updatedCoachID = id
+	s.updatedCoachActive = isActive
+	return nil
+}
+
+func (s *schedulingRepoStub) ListActiveCoaches(context.Context) ([]training.CoachDirectoryEntry, error) {
+	return s.coachDirectory, nil
+}
+
+func (s *schedulingRepoStub) ListCoachSchedule(context.Context) ([]training.CoachScheduleSession, error) {
+	return s.coachSchedule, nil
+}
 
 func (s *schedulingRepoStub) SubmitCoachAvailability(_ context.Context, coachID, coachName string, startsAt, endsAt time.Time, notes string) (string, error) {
 	s.coachAvailabilities = append(s.coachAvailabilities, training.CoachAvailability{
@@ -118,6 +153,13 @@ func (s *schedulingRepoStub) CreateTrainingSessions(_ context.Context, sessions 
 	return ids, nil
 }
 
+func (s *schedulingRepoStub) PublishTrainingSessions(_ context.Context, startsAt, endsAt time.Time) (training.PublicationResult, error) {
+	s.publishedStart = startsAt
+	s.publishedEnd = endsAt
+	s.publishCalls++
+	return s.publicationResult, nil
+}
+
 func (s *schedulingRepoStub) EditTrainingSession(_ context.Context, sessionID string, input training.TrainingSessionEditInput) error {
 	s.editedSessionID = sessionID
 	s.editedSession = input
@@ -146,61 +188,101 @@ func withUserContext(r *http.Request, userID string) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), adminauth.UserIDKeyForTest(), userID))
 }
 
-func TestCoachAvailabilityWorkflow(t *testing.T) {
-	repo := &schedulingRepoStub{}
+func TestCoachPortalScheduleAndDirectory(t *testing.T) {
 	logger := log.New(io.Discard, "", 0)
-	coachID := testCoachID
+	coachName := "Coach Maria"
+	repo := &schedulingRepoStub{
+		coachDirectory: []training.CoachDirectoryEntry{{ID: testCoachRecordID, FullName: coachName, IsActive: true}},
+		coachSchedule: []training.CoachScheduleSession{{
+			ID:                    testSessionID,
+			ProgramName:           "Weekend Junior Clinic",
+			StartsAt:              time.Now().UTC(),
+			EndsAt:                time.Now().UTC().Add(time.Hour),
+			Location:              "MMSU Court 2",
+			Status:                "open",
+			IsPublic:              true,
+			AssignedCoachID:       &coachName,
+			AssignedCoachName:     &coachName,
+			ParticipantNames:      []string{"Alex", "Bea"},
+			ConfirmedBookingCount: 2,
+		}},
+	}
 
-	// 1. Submit availability
-	submitHandler := CoachSubmitAvailability(repo, logger)
-	starts := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Minute)
-	ends := starts.Add(2 * time.Hour)
-	payload, _ := json.Marshal(map[string]any{
-		"coach_name": "Coach Maria",
-		"starts_at":  starts,
-		"ends_at":    ends,
-		"notes":      "Available for morning clinic",
-	})
-	req := httptest.NewRequest(http.MethodPost, "/api/coach/availability", bytes.NewReader(payload))
-	req = withUserContext(req, coachID)
 	rec := httptest.NewRecorder()
-	submitHandler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("submit availability: status=%d body=%s", rec.Code, rec.Body.String())
-	}
-
-	// 2. List availability
-	listHandler := CoachListAvailability(repo, logger)
-	req = withUserContext(httptest.NewRequest(http.MethodGet, "/api/coach/availability", nil), coachID)
-	rec = httptest.NewRecorder()
-	listHandler.ServeHTTP(rec, req)
+	req := withUserContext(httptest.NewRequest(http.MethodGet, "/api/coach/schedule", nil), testCoachID)
+	CoachListSchedule(repo, logger).ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("list availability: status=%d body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("coach schedule status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	var listResp struct {
-		Availability []training.CoachAvailability `json:"availability"`
+	var scheduleResp struct {
+		Sessions []training.CoachScheduleSession `json:"sessions"`
 	}
-	_ = json.Unmarshal(rec.Body.Bytes(), &listResp)
-	if len(listResp.Availability) != 1 || listResp.Availability[0].CoachName != "Coach Maria" {
-		t.Fatalf("unexpected list response: %#v", listResp)
+	if err := json.Unmarshal(rec.Body.Bytes(), &scheduleResp); err != nil {
+		t.Fatal(err)
+	}
+	if len(scheduleResp.Sessions) != 1 || len(scheduleResp.Sessions[0].ParticipantNames) != 2 {
+		t.Fatalf("unexpected schedule response: %#v", scheduleResp.Sessions)
 	}
 
-	// 3. Delete availability
-	delHandler := CoachDeleteAvailability(repo, logger)
-	req = withUserContext(httptest.NewRequest(http.MethodDelete, "/api/coach/availability/"+testAvailabilityID, nil), coachID)
-	req.SetPathValue("id", testAvailabilityID)
 	rec = httptest.NewRecorder()
-	delHandler.ServeHTTP(rec, req)
+	req = withUserContext(httptest.NewRequest(http.MethodGet, "/api/coach/coaches", nil), testCoachID)
+	CoachListCoaches(repo, logger).ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("delete availability: status=%d body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("coach directory status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var directoryResp struct {
+		Coaches []training.CoachDirectoryEntry `json:"coaches"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &directoryResp); err != nil {
+		t.Fatal(err)
+	}
+	if len(directoryResp.Coaches) != 1 || directoryResp.Coaches[0].FullName != coachName {
+		t.Fatalf("unexpected directory response: %#v", directoryResp.Coaches)
+	}
+}
+
+func TestAdminCoachDirectoryCreateAndUpdate(t *testing.T) {
+	logger := log.New(io.Discard, "", 0)
+	repo := &schedulingRepoStub{}
+
+	createHandler := AdminCreateCoach(repo, logger)
+	createPayload, _ := json.Marshal(map[string]any{"full_name": "  Coach Rafael  ", "email": "rafael@example.com"})
+	rec := httptest.NewRecorder()
+	createHandler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/admin/coaches", bytes.NewReader(createPayload)))
+	if rec.Code != http.StatusCreated || repo.createdCoachName != "Coach Rafael" {
+		t.Fatalf("create coach status=%d body=%s name=%q", rec.Code, rec.Body.String(), repo.createdCoachName)
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &created)
+	if created.ID != testCoachRecordID {
+		t.Fatalf("created coach id=%q", created.ID)
 	}
 
-	// Verify empty list
+	// Missing is_active is rejected.
 	rec = httptest.NewRecorder()
-	listHandler.ServeHTTP(rec, req)
-	_ = json.Unmarshal(rec.Body.Bytes(), &listResp)
-	if len(listResp.Availability) != 0 {
-		t.Fatalf("expected 0 availability items, got %d", len(listResp.Availability))
+	req := httptest.NewRequest(http.MethodPatch, "/api/admin/coaches/"+testCoachRecordID, bytes.NewBufferString(`{"full_name":"Coach Rafael"}`))
+	req.SetPathValue("id", testCoachRecordID)
+	AdminUpdateCoach(repo, logger).ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("update coach without is_active status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// Valid update deactivates the record.
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPatch, "/api/admin/coaches/"+testCoachRecordID, bytes.NewBufferString(`{"full_name":"Coach Rafael","is_active":false}`))
+	req.SetPathValue("id", testCoachRecordID)
+	AdminUpdateCoach(repo, logger).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || repo.updatedCoachID != testCoachRecordID || repo.updatedCoachActive {
+		t.Fatalf("update coach status=%d body=%s id=%q active=%v", rec.Code, rec.Body.String(), repo.updatedCoachID, repo.updatedCoachActive)
+	}
+
+	// Validation rejects an empty name.
+	rec = httptest.NewRecorder()
+	createHandler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/admin/coaches", bytes.NewBufferString(`{"full_name":"   "}`)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("create coach with blank name status=%d", rec.Code)
 	}
 }
 
@@ -385,6 +467,56 @@ func TestAdminCreateTrainingSessionsBatchRejectsInvalidSessionWithoutCallingRepo
 	AdminCreateTrainingSessionsBatch(repo, log.New(io.Discard, "", 0)).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/admin/training-sessions/batch", bytes.NewReader(payload)))
 	if rec.Code != http.StatusBadRequest || len(repo.createdBatch) != 0 {
 		t.Fatalf("status=%d sessions=%d body=%s", rec.Code, len(repo.createdBatch), rec.Body.String())
+	}
+}
+
+func TestAdminPublishTrainingSessionsDerivesManilaWindows(t *testing.T) {
+	repo := &schedulingRepoStub{publicationResult: training.PublicationResult{Published: 3, Skipped: 1}}
+	handler := AdminPublishTrainingSessions(repo, log.New(io.Discard, "", 0))
+
+	monthPayload := bytes.NewReader([]byte(`{"scope":"month","date":"2026-10-19"}`))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/admin/training-sessions/publish", monthPayload))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("month status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	manila := time.FixedZone("Asia/Manila", 8*60*60)
+	if !repo.publishedStart.Equal(time.Date(2026, 10, 1, 0, 0, 0, 0, manila)) ||
+		!repo.publishedEnd.Equal(time.Date(2026, 11, 1, 0, 0, 0, 0, manila)) {
+		t.Fatalf("month window = %s..%s", repo.publishedStart, repo.publishedEnd)
+	}
+	if !strings.Contains(rec.Body.String(), `"published":3`) {
+		t.Fatalf("response body = %s", rec.Body.String())
+	}
+
+	dayPayload := bytes.NewReader([]byte(`{"scope":"day","date":"2026-10-19"}`))
+	dayRec := httptest.NewRecorder()
+	handler.ServeHTTP(dayRec, httptest.NewRequest(http.MethodPost, "/api/admin/training-sessions/publish", dayPayload))
+	if dayRec.Code != http.StatusOK {
+		t.Fatalf("day status=%d body=%s", dayRec.Code, dayRec.Body.String())
+	}
+	if !repo.publishedStart.Equal(time.Date(2026, 10, 19, 0, 0, 0, 0, manila)) ||
+		!repo.publishedEnd.Equal(time.Date(2026, 10, 20, 0, 0, 0, 0, manila)) {
+		t.Fatalf("day window = %s..%s", repo.publishedStart, repo.publishedEnd)
+	}
+}
+
+func TestAdminPublishTrainingSessionsRejectsInvalidScopeAndDate(t *testing.T) {
+	repo := &schedulingRepoStub{}
+	handler := AdminPublishTrainingSessions(repo, log.New(io.Discard, "", 0))
+	for _, body := range []string{
+		`{"scope":"year","date":"2026-10-19"}`,
+		`{"scope":"day","date":"not-a-date"}`,
+		`{"scope":"day","date":""}`,
+	} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/admin/training-sessions/publish", bytes.NewReader([]byte(body))))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("body=%s status=%d", body, rec.Code)
+		}
+	}
+	if repo.publishCalls != 0 {
+		t.Fatal("invalid publication requests must not reach the repository")
 	}
 }
 

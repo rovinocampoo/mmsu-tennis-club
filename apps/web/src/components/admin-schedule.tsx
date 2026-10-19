@@ -2,6 +2,11 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import styles from "./admin-slot-planner.module.css";
+import {
+  eligibleUnpublishedSessions,
+  skippedUnpublishedSessions,
+} from "@/lib/session-publication.mjs";
+import { scrollToElement } from "@/lib/scroll-to.mjs";
 
 type AdminFetch = (
   input: RequestInfo | URL,
@@ -22,6 +27,16 @@ type Program = {
   id: string;
   name: string;
   description: string | null;
+};
+
+type CoachRecord = {
+  id: string;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  notes: string | null;
+  is_active: boolean;
+  assigned_session_count: number;
 };
 
 type Session = {
@@ -239,6 +254,7 @@ export default function AdminSchedule({
   onAuthorizationError: (cause: unknown) => void;
 }) {
   const [availability, setAvailability] = useState<Availability[]>([]);
+  const [coachDirectory, setCoachDirectory] = useState<CoachRecord[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
 
@@ -257,6 +273,9 @@ export default function AdminSchedule({
   const [showPastSessions, setShowPastSessions] = useState(false);
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [availabilityExpanded, setAvailabilityExpanded] = useState(false);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityLoaded, setAvailabilityLoaded] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState("");
 
   // The single session-creation workflow.
   const [programID, setProgramID] = useState("");
@@ -284,6 +303,15 @@ export default function AdminSchedule({
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
 
   const [creationNotice, setCreationNotice] = useState("");
+
+  // Bulk publication previews the eligible hidden sessions for the calendar's
+  // selected day or month and requires an explicit confirm before publishing.
+  const [publishPreview, setPublishPreview] = useState<{
+    scope: "day" | "month";
+    date: string;
+    sessions: Session[];
+    skipped: number;
+  } | null>(null);
 
   useEffect(() => {
     const updateTime = () => setCurrentTimeMs(Date.now());
@@ -331,23 +359,20 @@ export default function AdminSchedule({
     setError("");
 
     try {
-      const [availabilityResponse, programsResponse, sessionsResponse] =
+      const [coachesResponse, programsResponse, sessionsResponse] =
         await Promise.all([
-          adminFetch("/api/backend/admin/coach-availability"),
+          adminFetch("/api/backend/admin/coaches"),
           adminFetch("/api/backend/admin/training-programs"),
           adminFetch("/api/backend/admin/training-sessions"),
         ]);
 
-      const [availabilityData, programsData, sessionsData] = await Promise.all([
-        readResponse(
-          availabilityResponse,
-          "Could not load coach availability.",
-        ),
+      const [coachesData, programsData, sessionsData] = await Promise.all([
+        readResponse(coachesResponse, "Could not load coaches."),
         readResponse(programsResponse, "Could not load training programs."),
         readResponse(sessionsResponse, "Could not load training sessions."),
       ]);
 
-      setAvailability(availabilityData.availability || []);
+      setCoachDirectory(coachesData.coaches || []);
       setPrograms(programsData.programs || []);
       setSessions(sessionsData.sessions || []);
     } catch (cause) {
@@ -358,6 +383,45 @@ export default function AdminSchedule({
       );
     } finally {
       setLoading(false);
+    }
+  }, [adminFetch, readResponse]);
+
+  // Legacy coach-availability records are a historical reference only and are
+  // no longer submitted by coaches. Load them only when an admin opens the
+  // reference panel so the retired endpoint never delays or breaks the normal
+  // schedule view.
+  const loadAvailability = useCallback(async () => {
+    setAvailabilityLoading(true);
+    setAvailabilityError("");
+
+    try {
+      const response = await adminFetch(
+        "/api/backend/admin/coach-availability",
+      );
+
+      const data = await readResponse(
+        response,
+        "Could not load coach availability.",
+      );
+
+      setAvailability(data.availability || []);
+      setAvailabilityLoaded(true);
+    } catch (cause) {
+      if (
+        cause instanceof Error &&
+        (cause.message.includes("session has expired") ||
+          cause.message.includes("not authorized"))
+      ) {
+        return;
+      }
+
+      setAvailabilityError(
+        cause instanceof Error
+          ? cause.message
+          : "Coach availability could not be loaded.",
+      );
+    } finally {
+      setAvailabilityLoading(false);
     }
   }, [adminFetch, readResponse]);
 
@@ -408,19 +472,17 @@ export default function AdminSchedule({
     [availability, periodRange],
   );
 
-  const coaches = useMemo(() => {
-    const latestByID = new Map<string, Availability>();
-
-    for (const item of [...availability].sort((a, b) =>
-      a.created_at.localeCompare(b.created_at),
-    )) {
-      latestByID.set(item.coach_id, item);
-    }
-
-    return [...latestByID.values()].sort((a, b) =>
-      a.coach_name.localeCompare(b.coach_name),
-    );
-  }, [availability]);
+  const coaches = useMemo(
+    () =>
+      coachDirectory
+        .filter((coach) => coach.is_active)
+        .map((coach) => ({
+          coach_id: coach.id,
+          coach_name: coach.full_name,
+        }))
+        .sort((a, b) => a.coach_name.localeCompare(b.coach_name)),
+    [coachDirectory],
+  );
 
   const listedSessions = useMemo(
     () =>
@@ -452,10 +514,11 @@ export default function AdminSchedule({
     ),
   );
 
-  const monthAvailability = availability.filter((item) =>
-    dateKey(new Date(item.starts_at)).startsWith(
-      `${month.year}-${String(month.month).padStart(2, "0")}`,
-    ),
+  const monthAvailability = (availabilityLoaded ? availability : []).filter(
+    (item) =>
+      dateKey(new Date(item.starts_at)).startsWith(
+        `${month.year}-${String(month.month).padStart(2, "0")}`,
+      ),
   );
 
   const selectedSessions = calendarSessions.filter(
@@ -465,6 +528,80 @@ export default function AdminSchedule({
   const selectedAvailability = monthAvailability.filter(
     (item) => dateKey(new Date(item.starts_at)) === selectedDate,
   );
+
+  function publicationDate(scope: "day" | "month") {
+    return scope === "month"
+      ? `${month.year}-${String(month.month).padStart(2, "0")}-01`
+      : selectedDate;
+  }
+
+  function previewPublication(scope: "day" | "month") {
+    const date = publicationDate(scope);
+
+    setError("");
+    setNotice("");
+    setPublishPreview({
+      scope,
+      date,
+      sessions: eligibleUnpublishedSessions(sessions, scope, date),
+      skipped: skippedUnpublishedSessions(sessions, scope, date).length,
+    });
+
+    window.requestAnimationFrame(() => {
+      scrollToElement("admin-publication-preview");
+    });
+  }
+
+  async function confirmPublication() {
+    if (!publishPreview) return;
+
+    // Publish exactly what was previewed, even if the calendar moved on.
+    const { scope, date } = publishPreview;
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await adminFetch(
+        "/api/backend/admin/training-sessions/publish",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scope, date }),
+        },
+      );
+
+      const result = await readResponse(
+        response,
+        "Could not publish the selected sessions.",
+      );
+
+      const published = Number(result.published ?? 0);
+      const skipped = Number(result.skipped ?? 0);
+
+      setPublishPreview(null);
+      setNotice(
+        `Published ${published} session${published === 1 ? "" : "s"}.${
+          skipped
+            ? ` ${skipped} closed or cancelled session${
+                skipped === 1 ? "" : "s"
+              } were left unchanged.`
+            : ""
+        }`,
+      );
+
+      await loadSchedule();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not publish the selected sessions.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const occurrenceDates = useMemo(
     () => getOccurrenceDates(startDate, endDate, frequency, selectedWeekdays),
@@ -750,6 +887,13 @@ export default function AdminSchedule({
 
     setError("");
     setNotice("");
+
+    // Wait for the editor to mount before scrolling it into view.
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        scrollToElement("admin-session-editor");
+      });
+    });
   }
 
   const editHasBookedScheduleChanges = Boolean(
@@ -978,13 +1122,20 @@ export default function AdminSchedule({
     setSelectedDate(
       `${nextMonth.year}-${String(nextMonth.month).padStart(2, "0")}-01`,
     );
+    setPublishPreview(null);
   }
 
   function editForm(session: Session) {
     if (editing?.id !== session.id || !editDraft) return null;
 
     return (
-      <form className={styles.editForm} onSubmit={saveEdit}>
+      <form
+        className={styles.editForm}
+        id="admin-session-editor"
+        style={{ scrollMarginTop: "24px" }}
+        key={session.id}
+        onSubmit={saveEdit}
+      >
         <div className={styles.editFormHead}>
           <div>
             <p className="section-kicker">EDIT SESSION</p>
@@ -1175,7 +1326,11 @@ export default function AdminSchedule({
               type="button"
               aria-expanded={availabilityExpanded}
               aria-controls="coach-availability-content"
-              onClick={() => setAvailabilityExpanded((current) => !current)}
+              onClick={() => {
+                const next = !availabilityExpanded;
+                setAvailabilityExpanded(next);
+                if (next && !availabilityLoaded) void loadAvailability();
+              }}
             >
               {availabilityExpanded ? "Hide availability" : "Show availability"}
             </button>
@@ -1183,10 +1338,10 @@ export default function AdminSchedule({
             <button
               className="admin-button secondary"
               type="button"
-              disabled={loading || busy}
-              onClick={() => void loadSchedule()}
+              disabled={availabilityLoading || busy}
+              onClick={() => void loadAvailability()}
             >
-              {loading ? "Loading…" : "Refresh"}
+              {availabilityLoading ? "Loading…" : "Refresh"}
             </button>
           </div>
         </div>
@@ -1261,7 +1416,15 @@ export default function AdminSchedule({
               </div>
             </div>
 
-            {visibleAvailability.length === 0 && !loading ? (
+            {availabilityLoading ? (
+              <p className="admin-state" role="status">
+                Loading coach availability…
+              </p>
+            ) : availabilityError ? (
+              <p className="admin-state form-error" role="alert">
+                {availabilityError}
+              </p>
+            ) : visibleAvailability.length === 0 ? (
               <p className="admin-state">
                 {availability.length === 0
                   ? "No coach availability has been submitted."
@@ -1800,6 +1963,106 @@ export default function AdminSchedule({
             </div>
 
             <div
+              className="schedule-view-switch publication-toolbar"
+              role="group"
+              aria-label="Bulk publication"
+            >
+              <button
+                type="button"
+                className="admin-button secondary"
+                disabled={loading || busy || sessions.length === 0}
+                onClick={() => previewPublication("day")}
+              >
+                Publish day
+              </button>
+
+              <button
+                type="button"
+                className="admin-button secondary"
+                disabled={loading || busy || sessions.length === 0}
+                onClick={() => previewPublication("month")}
+              >
+                Publish month
+              </button>
+            </div>
+
+            {publishPreview && (
+              <section
+                className="publication-preview"
+                id="admin-publication-preview"
+                style={{ scrollMarginTop: "24px" }}
+                aria-labelledby="admin-publication-preview-title"
+              >
+                <h4 id="admin-publication-preview-title">
+                  {publishPreview.scope === "day"
+                    ? `Publish hidden sessions on ${selectedDate}`
+                    : `Publish hidden sessions in ${adminMonth.format(
+                        new Date(Date.UTC(month.year, month.month - 1, 1)),
+                      )}`}
+                </h4>
+
+                {publishPreview.sessions.length === 0 ? (
+                  <p className="admin-state">
+                    No hidden, still-open sessions are eligible for this{" "}
+                    {publishPreview.scope}.
+                  </p>
+                ) : (
+                  <>
+                    <p className="admin-help">
+                      {publishPreview.sessions.length} hidden session
+                      {publishPreview.sessions.length === 1 ? "" : "s"} will be
+                      published on the public schedule. Nothing is published
+                      until you confirm.
+                    </p>
+
+                    <ul className="publication-list">
+                      {publishPreview.sessions.map((session) => (
+                        <li key={session.id}>
+                          <strong>{session.program_name}</strong> ·{" "}
+                          {sessionDateTime.format(new Date(session.starts_at))}{" "}
+                          – {localTime.format(new Date(session.ends_at))} ·{" "}
+                          {session.location}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+
+                {publishPreview.skipped > 0 && (
+                  <p className="admin-help">
+                    {publishPreview.skipped} closed or cancelled hidden session
+                    {publishPreview.skipped === 1 ? "" : "s"} in this{" "}
+                    {publishPreview.scope} will not be reopened or reactivated.
+                  </p>
+                )}
+
+                <div className="schedule-view-switch">
+                  <button
+                    type="button"
+                    className="admin-button"
+                    disabled={busy || publishPreview.sessions.length === 0}
+                    onClick={() => void confirmPublication()}
+                  >
+                    {busy
+                      ? "Publishing…"
+                      : `Confirm publish ${publishPreview.sessions.length} session${
+                          publishPreview.sessions.length === 1 ? "" : "s"
+                        }`}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="admin-button secondary"
+                    disabled={busy}
+                    onClick={() => setPublishPreview(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </section>
+            )}
+
+            <div
               className="training-calendar admin-calendar"
               role="grid"
               aria-label={`Training and coach availability for ${adminMonth.format(
@@ -1833,18 +2096,18 @@ export default function AdminSchedule({
                     type="button"
                     role="gridcell"
                     aria-selected={selectedDate === day.key}
-                    aria-label={`${day.key}, ${daySessions.length} sessions, ${dayAvailability.length} coach availability submissions`}
+                    aria-label={`${day.key}, ${daySessions.length} sessions${
+                      availabilityLoaded
+                        ? `, ${dayAvailability.length} coach availability submissions`
+                        : ""
+                    }`}
                     key={day.key}
                     onClick={() => {
                       setSelectedDate(day.key);
+                      setPublishPreview(null);
 
                       window.requestAnimationFrame(() => {
-                        document
-                          .getElementById("admin-selected-date-agenda")
-                          ?.scrollIntoView({
-                            behavior: "smooth",
-                            block: "start",
-                          });
+                        scrollToElement("admin-selected-date-agenda");
                       });
                     }}
                   >
@@ -1908,7 +2171,8 @@ export default function AdminSchedule({
               {selectedSessions.length === 0 &&
               selectedAvailability.length === 0 ? (
                 <p className="admin-state">
-                  No sessions or availability on this date.
+                  No sessions{availabilityLoaded ? " or availability" : ""} on
+                  this date.
                 </p>
               ) : (
                 <>
@@ -1955,6 +2219,47 @@ export default function AdminSchedule({
                       </div>
 
                       <div className="session-agenda-actions">
+                        <label className="session-coach-assignment">
+                          Assigned coach
+                          <select
+                            value={session.assigned_coach_id || ""}
+                            disabled={
+                              busy ||
+                              session.status === "cancelled" ||
+                              (coaches.length === 0 &&
+                                !session.assigned_coach_id)
+                            }
+                            onChange={(event) =>
+                              void assignCoach(
+                                session.id,
+                                event.target.value || null,
+                              )
+                            }
+                          >
+                            <option value="">Unassigned</option>
+
+                            {session.assigned_coach_id &&
+                              !coaches.some(
+                                (coach) =>
+                                  coach.coach_id === session.assigned_coach_id,
+                              ) && (
+                                <option value={session.assigned_coach_id}>
+                                  {session.assigned_coach_name ||
+                                    "Previously assigned coach"}
+                                </option>
+                              )}
+
+                            {coaches.map((coach) => (
+                              <option
+                                key={coach.coach_id}
+                                value={coach.coach_id}
+                              >
+                                {coach.coach_name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
                         <button
                           className="admin-button secondary"
                           type="button"
@@ -2133,8 +2438,8 @@ export default function AdminSchedule({
 
                       {coaches.length === 0 && (
                         <span className="admin-help">
-                          A coach must submit availability before being
-                          assigned.
+                          Add a coach in the coach directory before assigning
+                          one.
                         </span>
                       )}
 

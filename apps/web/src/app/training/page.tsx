@@ -34,7 +34,7 @@ export default async function TrainingPage() {
           <span className="brand-mark" aria-hidden="true">M</span>
           <span><strong>MMSU</strong><small>TENNIS CLUB</small></span>
         </Link>
-        <span className="header-note"><Link href="/coach">Coach portal</Link> · <Link href="/admin">Club admin</Link></span>
+        <span className="header-note"><Link href="/faq">FAQ</Link> · <Link href="/suggestions">Suggestions &amp; feedback</Link> · <Link href="/coach">Coach portal</Link> · <Link href="/admin">Club admin</Link></span>
       </header>
 
       <section className="training-hero" aria-labelledby="training-title">

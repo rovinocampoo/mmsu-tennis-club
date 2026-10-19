@@ -34,12 +34,15 @@ type Repository interface {
 }
 
 // BookingRequest is a public request for a spot; it does not reserve capacity.
+// Participants holds the normalized per-person names; FullName is the
+// comma-joined display fallback persisted for backward compatibility.
 type BookingRequest struct {
-	SessionID  string
-	SessionIDs []string
-	FullName   string
-	Email      string
-	Phone      string
+	SessionID    string
+	SessionIDs   []string
+	FullName     string
+	Participants []string
+	Email        string
+	Phone        string
 }
 
 type TrainingSessionCreateInput struct {
@@ -64,6 +67,17 @@ type TrainingSessionEditInput struct {
 	AcknowledgeBookedChanges bool
 }
 
+// PublicationResult reports the outcome of one atomic bulk-publication run.
+// Published is the number of hidden, open sessions made public; Skipped is the
+// number of hidden sessions in range that were left alone because they were
+// closed or cancelled. Failed is always zero because the run is a single
+// statement that either commits entirely or errors.
+type PublicationResult struct {
+	Published int `json:"published"`
+	Skipped   int `json:"skipped"`
+	Failed    int `json:"failed"`
+}
+
 type PublicBookingStatus struct {
 	RequestReference string
 	Status           string
@@ -74,13 +88,13 @@ type PublicBookingStatus struct {
 }
 
 type CalendarEvent struct {
-	RequestID string
+	RequestID        string
 	RequestReference string
-	ParticipantName string
-	ProgramName string
-	StartsAt time.Time
-	EndsAt time.Time
-	Location string
+	ParticipantName  string
+	ProgramName      string
+	StartsAt         time.Time
+	EndsAt           time.Time
+	Location         string
 }
 
 type BookingRequestRecord struct {
@@ -102,6 +116,28 @@ type PlayerCandidate struct {
 	FullName string  `json:"full_name"`
 	Email    *string `json:"email"`
 	Phone    *string `json:"phone"`
+}
+
+// FeedbackSubmission is a public suggestion or feedback entry. Contact fields
+// are optional so anonymous submissions are supported.
+type FeedbackSubmission struct {
+	Category string
+	Message  string
+	Name     string
+	Email    string
+}
+
+// FeedbackRecord is an admin-visible feedback submission.
+type FeedbackRecord struct {
+	ID         string     `json:"id"`
+	Category   string     `json:"category"`
+	Message    string     `json:"message"`
+	Name       *string    `json:"name"`
+	Email      *string    `json:"email"`
+	Status     string     `json:"status"`
+	CreatedAt  time.Time  `json:"created_at"`
+	ReviewedAt *time.Time `json:"reviewed_at"`
+	ReviewedBy *string    `json:"reviewed_by"`
 }
 
 type CoachAvailability struct {
@@ -158,6 +194,7 @@ type ApprovedClientRecord struct {
 	AssignedCoachID   *string   `json:"assigned_coach_id"`
 	AssignedCoachName *string   `json:"assigned_coach_name"`
 	BookingCreatedAt  time.Time `json:"booking_created_at"`
+	ParticipantNames  []string  `json:"participant_names"`
 }
 
 type AssignedTrainingSession struct {
@@ -169,6 +206,47 @@ type AssignedTrainingSession struct {
 	Location           string    `json:"location"`
 	Status             string    `json:"status"`
 	IsPublic           bool      `json:"is_public"`
+}
+
+// Coach is an admin-managed directory record. Coach records exist
+// independently of any login.
+type Coach struct {
+	ID                   string    `json:"id"`
+	FullName             string    `json:"full_name"`
+	Email                *string   `json:"email"`
+	Phone                *string   `json:"phone"`
+	Notes                *string   `json:"notes"`
+	IsActive             bool      `json:"is_active"`
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
+	AssignedSessionCount int64     `json:"assigned_session_count"`
+}
+
+// CoachDirectoryEntry is the read-only coach directory shown to the coach portal.
+type CoachDirectoryEntry struct {
+	ID       string  `json:"id"`
+	FullName string  `json:"full_name"`
+	Email    *string `json:"email"`
+	Phone    *string `json:"phone"`
+	Notes    *string `json:"notes"`
+	IsActive bool    `json:"is_active"`
+}
+
+// CoachScheduleSession is a read-only schedule row for the shared coach portal,
+// including the single assigned coach and the confirmed participant roster.
+type CoachScheduleSession struct {
+	ID                    string    `json:"id"`
+	ProgramName           string    `json:"program_name"`
+	ProgramDescription    *string   `json:"program_description"`
+	StartsAt              time.Time `json:"starts_at"`
+	EndsAt                time.Time `json:"ends_at"`
+	Location              string    `json:"location"`
+	Status                string    `json:"status"`
+	IsPublic              bool      `json:"is_public"`
+	AssignedCoachID       *string   `json:"assigned_coach_id"`
+	AssignedCoachName     *string   `json:"assigned_coach_name"`
+	ParticipantNames      []string  `json:"participant_names"`
+	ConfirmedBookingCount int64     `json:"confirmed_booking_count"`
 }
 
 type BookingRepository interface {
@@ -186,6 +264,14 @@ type BookingRepository interface {
 	ListAdminTrainingPrograms(ctx context.Context) ([]TrainingProgram, error)
 	ListAdminTrainingSessions(ctx context.Context) ([]AdminSessionRecord, error)
 	ListApprovedClients(ctx context.Context) ([]ApprovedClientRecord, error)
+	ListCoaches(ctx context.Context) ([]Coach, error)
+	CreateCoach(ctx context.Context, fullName, email, phone, notes string) (string, error)
+	UpdateCoach(ctx context.Context, id, fullName, email, phone, notes string, isActive bool) error
+	ListActiveCoaches(ctx context.Context) ([]CoachDirectoryEntry, error)
+	ListCoachSchedule(ctx context.Context) ([]CoachScheduleSession, error)
+	CreateFeedback(ctx context.Context, submission FeedbackSubmission) (string, error)
+	ListFeedbackSubmissions(ctx context.Context) ([]FeedbackRecord, error)
+	UpdateFeedbackStatus(ctx context.Context, id, status, adminID string) (bool, error)
 	ListAssignedTrainingSessions(ctx context.Context, coachID string) ([]AssignedTrainingSession, error)
 	AssignTrainingSessionCoach(ctx context.Context, sessionID string, coachID *string) error
 	CreateTrainingSession(ctx context.Context, programID string, startsAt, endsAt time.Time, location string, capacity *int, notes string, isPublic bool) (string, error)

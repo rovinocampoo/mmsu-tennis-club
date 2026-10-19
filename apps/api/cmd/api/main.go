@@ -24,6 +24,8 @@ const (
 	bookingRequestWindow      = time.Hour
 	bookingStatusLimit        = 30
 	bookingStatusWindow       = time.Minute
+	feedbackSubmissionLimit   = 10
+	feedbackSubmissionWindow  = time.Hour
 	publicRateLimitMaxClients = 10_000
 )
 
@@ -93,8 +95,11 @@ func main() {
 }
 
 func newAPIHandler(cfg config.Config, trainingService *training.Service, bookingRepository, adminBookingRepository training.BookingRepository, logger *log.Logger, notifiers ...notifications.ApprovalNotifier) http.Handler {
- var notifier notifications.ApprovalNotifier; if len(notifiers)>0 { notifier=notifiers[0] }
- return newAPIHandlerWithCalendar(cfg, trainingService, bookingRepository, adminBookingRepository, logger, notifier, nil)
+	var notifier notifications.ApprovalNotifier
+	if len(notifiers) > 0 {
+		notifier = notifiers[0]
+	}
+	return newAPIHandlerWithCalendar(cfg, trainingService, bookingRepository, adminBookingRepository, logger, notifier, nil)
 }
 func newAPIHandlerWithCalendar(cfg config.Config, trainingService *training.Service, bookingRepository, adminBookingRepository training.BookingRepository, logger *log.Logger, approvalNotifier notifications.ApprovalNotifier, calendarSyncer *googlecalendar.Client) http.Handler {
 	if logger == nil {
@@ -114,6 +119,11 @@ func newAPIHandlerWithCalendar(cfg config.Config, trainingService *training.Serv
 		handlers.PublicBookingStatus(bookingRepository, logger),
 		cfg.APIProxySharedSecret,
 	))
+	mux.Handle("POST /api/feedback-submissions", ratelimit.MiddlewareWithProxySecret(
+		ratelimit.New(feedbackSubmissionLimit, feedbackSubmissionWindow, publicRateLimitMaxClients),
+		handlers.FeedbackSubmission(bookingRepository, logger),
+		cfg.APIProxySharedSecret,
+	))
 	var authValidator *adminauth.Validator
 	if cfg.SupabaseURL != "" && cfg.SupabasePublishableKey != "" {
 		var err error
@@ -129,21 +139,26 @@ func newAPIHandlerWithCalendar(cfg config.Config, trainingService *training.Serv
 		return adminauth.Protect(handler, authValidator, cfg.CoachUserIDs)
 	}
 
-	mux.Handle("GET /api/coach/availability", protectCoach(handlers.CoachListAvailability(bookingRepository, logger)))
-	mux.Handle("POST /api/coach/availability", protectCoach(handlers.CoachSubmitAvailability(bookingRepository, logger)))
-	mux.Handle("DELETE /api/coach/availability/{id}", protectCoach(handlers.CoachDeleteAvailability(bookingRepository, logger)))
+	mux.Handle("GET /api/coach/schedule", protectCoach(handlers.CoachListSchedule(bookingRepository, logger)))
+	mux.Handle("GET /api/coach/coaches", protectCoach(handlers.CoachListCoaches(bookingRepository, logger)))
 	mux.Handle("GET /api/coach/sessions", protectCoach(handlers.CoachListAssignedSessions(bookingRepository, logger)))
 
 	mux.Handle("GET /api/admin/coach-availability", protectAdmin(handlers.AdminListCoachAvailability(adminBookingRepository, logger)))
+	mux.Handle("GET /api/admin/coaches", protectAdmin(handlers.AdminListCoaches(adminBookingRepository, logger)))
+	mux.Handle("POST /api/admin/coaches", protectAdmin(handlers.AdminCreateCoach(adminBookingRepository, logger)))
+	mux.Handle("PATCH /api/admin/coaches/{id}", protectAdmin(handlers.AdminUpdateCoach(adminBookingRepository, logger)))
 	mux.Handle("GET /api/admin/training-programs", protectAdmin(handlers.AdminListTrainingPrograms(adminBookingRepository, logger)))
 	mux.Handle("GET /api/admin/training-sessions", protectAdmin(handlers.AdminListTrainingSessions(adminBookingRepository, logger)))
 	mux.Handle("POST /api/admin/training-sessions", protectAdmin(handlers.AdminCreateTrainingSession(adminBookingRepository, logger)))
 	mux.Handle("POST /api/admin/training-sessions/batch", protectAdmin(handlers.AdminCreateTrainingSessionsBatch(adminBookingRepository, logger)))
+	mux.Handle("POST /api/admin/training-sessions/publish", protectAdmin(handlers.AdminPublishTrainingSessions(adminBookingRepository, logger)))
 	mux.Handle("PUT /api/admin/training-sessions/{id}", protectAdmin(handlers.AdminEditTrainingSession(adminBookingRepository, logger)))
 	mux.Handle("PATCH /api/admin/training-sessions/{id}", protectAdmin(handlers.AdminUpdateTrainingSession(adminBookingRepository, logger)))
 	mux.Handle("PATCH /api/admin/training-sessions/{id}/coach", protectAdmin(handlers.AdminAssignTrainingSessionCoach(adminBookingRepository, logger)))
 
 	mux.Handle("GET /api/admin/booking-requests", protectAdmin(handlers.AdminBookingRequests(adminBookingRepository, logger)))
+	mux.Handle("GET /api/admin/feedback-submissions", protectAdmin(handlers.AdminFeedbackSubmissions(adminBookingRepository, logger)))
+	mux.Handle("PATCH /api/admin/feedback-submissions/{id}", protectAdmin(handlers.AdminUpdateFeedbackSubmission(adminBookingRepository, logger)))
 	mux.Handle("GET /api/admin/approved-clients", protectAdmin(handlers.AdminApprovedClients(adminBookingRepository, logger)))
 	mux.Handle("GET /api/admin/players", protectAdmin(handlers.AdminPlayerSearch(adminBookingRepository, logger)))
 	mux.Handle("POST /api/admin/booking-requests/{id}/approve", protectAdmin(handlers.AdminApproveBookingRequestWithCalendar(adminBookingRepository, logger, calendarSyncer, approvalNotifier)))

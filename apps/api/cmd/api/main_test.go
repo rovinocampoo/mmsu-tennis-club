@@ -83,23 +83,51 @@ func TestPublicBookingEndpointsApplyIndependentRateLimits(t *testing.T) {
 	}
 }
 
+func TestPublicFeedbackEndpointAppliesItsOwnRateLimit(t *testing.T) {
+	handler := newAPIHandler(config.Config{}, training.NewService(nil), nil, nil, log.New(io.Discard, "", 0))
+	body := `{"category":"feedback","message":"Great coaching this week."}`
+
+	for i := 0; i < feedbackSubmissionLimit; i++ {
+		request := httptest.NewRequest(http.MethodPost, "/api/feedback-submissions", strings.NewReader(body))
+		request.RemoteAddr = "192.0.2.30:4567"
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusServiceUnavailable {
+			t.Fatalf("feedback submission %d status=%d, want service-unavailable response below limit", i+1, response.Code)
+		}
+	}
+
+	exceeded := httptest.NewRequest(http.MethodPost, "/api/feedback-submissions", strings.NewReader(body))
+	exceeded.RemoteAddr = "192.0.2.30:4567"
+	exceededResponse := httptest.NewRecorder()
+	handler.ServeHTTP(exceededResponse, exceeded)
+	if exceededResponse.Code != http.StatusTooManyRequests || exceededResponse.Header().Get("Retry-After") == "" {
+		t.Fatalf("feedback submission above configured limit status=%d Retry-After=%q", exceededResponse.Code, exceededResponse.Header().Get("Retry-After"))
+	}
+}
+
 func TestAllAdminRoutesRejectMissingAuthorization(t *testing.T) {
 	handler := newAPIHandler(config.Config{}, training.NewService(nil), nil, nil, log.New(io.Discard, "", 0))
 	for _, request := range []struct{ method, path, body string }{
 		{http.MethodGet, "/api/admin/booking-requests", ""},
+		{http.MethodGet, "/api/admin/feedback-submissions", ""},
+		{http.MethodPatch, "/api/admin/feedback-submissions/11111111-1111-4111-8111-111111111111", `{"status":"reviewed"}`},
 		{http.MethodGet, "/api/admin/players?q=Alex", ""},
 		{http.MethodPost, "/api/admin/booking-requests/11111111-1111-4111-8111-111111111111/approve", `{"create_new":true}`},
 		{http.MethodPost, "/api/admin/booking-requests/11111111-1111-4111-8111-111111111111/reject", `{}`},
 		{http.MethodPost, "/api/admin/booking-requests/11111111-1111-4111-8111-111111111111/notification/retry", ""},
-		{http.MethodGet, "/api/coach/availability", ""},
+		{http.MethodGet, "/api/coach/schedule", ""},
+		{http.MethodGet, "/api/coach/coaches", ""},
 		{http.MethodGet, "/api/coach/sessions", ""},
-		{http.MethodPost, "/api/coach/availability", `{"notes":"test"}`},
-		{http.MethodDelete, "/api/coach/availability/11111111-1111-4111-8111-111111111111", ""},
 		{http.MethodGet, "/api/admin/coach-availability", ""},
+		{http.MethodGet, "/api/admin/coaches", ""},
+		{http.MethodPost, "/api/admin/coaches", `{"full_name":"Coach"}`},
+		{http.MethodPatch, "/api/admin/coaches/11111111-1111-4111-8111-111111111111", `{"full_name":"Coach","is_active":true}`},
 		{http.MethodGet, "/api/admin/training-programs", ""},
 		{http.MethodGet, "/api/admin/training-sessions", ""},
 		{http.MethodPost, "/api/admin/training-sessions", `{}`},
 		{http.MethodPost, "/api/admin/training-sessions/batch", `{"sessions":[]}`},
+		{http.MethodPost, "/api/admin/training-sessions/publish", `{"scope":"day","date":"2026-10-19"}`},
 		{http.MethodPut, "/api/admin/training-sessions/11111111-1111-4111-8111-111111111111", `{}`},
 		{http.MethodPatch, "/api/admin/training-sessions/11111111-1111-4111-8111-111111111111", `{}`},
 		{http.MethodPatch, "/api/admin/training-sessions/11111111-1111-4111-8111-111111111111/coach", `{"coach_id":null}`},
@@ -139,7 +167,7 @@ func TestCoachRoutesRequireAllowlistedUser(t *testing.T) {
 		{name: "missing token is unauthorized", wantStatus: http.StatusUnauthorized},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			for _, path := range []string{"/api/coach/availability", "/api/coach/sessions"} {
+			for _, path := range []string{"/api/coach/schedule", "/api/coach/coaches", "/api/coach/sessions"} {
 				request := httptest.NewRequest(http.MethodGet, path, nil)
 				if tc.token != "" {
 					request.Header.Set("Authorization", "Bearer "+tc.token)

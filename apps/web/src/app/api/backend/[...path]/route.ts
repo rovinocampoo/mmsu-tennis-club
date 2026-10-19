@@ -11,8 +11,8 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   if (request.method === "POST" && path[0] === "booking-status" && request.nextUrl.search) {
     return NextResponse.json({ error: "status tokens must be submitted in the request body" }, { status: 400, headers: { "cache-control": "no-store" } });
   }
-  const isPublicBookingRequest = request.method === "POST" && ["booking-requests", "booking-status"].includes(path[0]);
-  const proxyIdentity = isPublicBookingRequest
+  const isPublicWriteRequest = request.method === "POST" && ["booking-requests", "booking-status", "feedback-submissions"].includes(path[0]);
+  const proxyIdentity = isPublicWriteRequest
     ? trustedProxyIdentity(request.headers, proxySharedSecret, process.env.NODE_ENV === "production")
     : null;
   if (proxyIdentity && "error" in proxyIdentity) {

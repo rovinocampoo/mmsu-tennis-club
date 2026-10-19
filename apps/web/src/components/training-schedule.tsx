@@ -3,6 +3,11 @@
 import { useMemo, useState } from "react";
 import BookingRequestForm from "@/components/booking-request-form";
 import styles from "./training-slot-selection.module.css";
+import {
+  sessionAvailability,
+  unavailableReason,
+} from "@/lib/session-availability.mjs";
+import { scrollToElement } from "@/lib/scroll-to.mjs";
 import type { TrainingProgram, TrainingSession } from "@/lib/training-sessions";
 
 type ScheduleView = "list" | "calendar";
@@ -39,17 +44,6 @@ const calendarMonth = new Intl.DateTimeFormat("en-PH", {
   month: "long",
   year: "numeric",
 });
-
-function sessionAvailability(session: TrainingSession) {
-  if (session.status !== "open")
-    return { label: "Registration closed", kind: "closed" };
-  if (session.remaining_capacity === 0) return { label: "Full", kind: "full" };
-  if (session.capacity === null) return { label: "Open", kind: "open" };
-  return {
-    label: `${session.remaining_capacity ?? 0} spaces left`,
-    kind: "open",
-  };
-}
 
 function canRequestBooking(session: TrainingSession) {
   return (
@@ -138,10 +132,14 @@ function SessionCard({
             <span>{selected ? "Slot selected" : "Select this slot"}</span>
           </label>
         ) : (
-          <span className="session-unavailable">
-            {availability.kind === "full"
-              ? "No spots left"
-              : "Not accepting requests"}
+          <span
+            className={`session-unavailable session-unavailable-${availability.kind}`}
+            role="status"
+          >
+            <span className="session-unavailable-icon" aria-hidden="true">
+              {availability.kind === "full" ? "✕" : "⌛"}
+            </span>
+            {unavailableReason(availability.kind)}
           </span>
         )}
       </div>
@@ -288,9 +286,7 @@ export default function TrainingSchedule({
     setPrimaryTab("sessions");
     // Wait for React to reveal the sessions panel before scrolling to it.
     window.requestAnimationFrame(() => {
-      document
-        .getElementById("sessions")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      scrollToElement("sessions");
     });
   }
 
@@ -462,12 +458,7 @@ export default function TrainingSchedule({
                       setSelectedDay(day.key);
 
                       window.requestAnimationFrame(() => {
-                        document
-                          .getElementById("selected-date-agenda")
-                          ?.scrollIntoView({
-                            behavior: "smooth",
-                            block: "start",
-                          });
+                        scrollToElement("selected-date-agenda");
                       });
                     }}
                   >

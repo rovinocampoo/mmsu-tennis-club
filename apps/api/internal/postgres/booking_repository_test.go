@@ -151,8 +151,24 @@ func TestBookingRepositoryCreatesPendingRequestFunction(t *testing.T) {
 	if err != nil || id != "request-id" {
 		t.Fatalf("id=%q err=%v", id, err)
 	}
-	if !strings.Contains(db.query, "create_public_booking_request_with_slots_token") || !reflect.DeepEqual(db.args, []any{`["session-id"]`, "Alex Player", (*string)(ptr("alex@example.com")), (*string)(nil), hash}) {
+	if !strings.Contains(db.query, "create_public_booking_request_with_participants_token") || !reflect.DeepEqual(db.args, []any{`["session-id"]`, `["Alex Player"]`, (*string)(ptr("alex@example.com")), (*string)(nil), hash}) {
 		t.Fatalf("query=%q args=%#v", db.query, db.args)
+	}
+}
+
+func TestBookingRepositorySendsEveryParticipantToTheRequestFunction(t *testing.T) {
+	db := &queryRowStub{value: "request-id"}
+	hash := make([]byte, 32)
+	_, err := NewBookingRepository(db).CreateRequest(context.Background(), training.BookingRequest{
+		SessionIDs:   []string{"session-1"},
+		FullName:     "Alex, Sam",
+		Participants: []string{"Alex", "Sam"},
+	}, hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(db.args, []any{`["session-1"]`, `["Alex","Sam"]`, (*string)(nil), (*string)(nil), hash}) {
+		t.Fatalf("args=%#v", db.args)
 	}
 }
 

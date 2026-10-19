@@ -7,7 +7,7 @@ import (
 )
 
 func TestMultiSlotMigrationKeepsBatchCreationAtomicAndConflictsServerValidated(t *testing.T) {
-	content, err := os.ReadFile("../../../../supabase/migrations/20261016081200_add_multi_slot_training_bookings.sql")
+	content, err := os.ReadFile("../../../../supabase/migrations/20261016093515_multi_slot_training_bookings.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func TestMultiSlotMigrationKeepsBatchCreationAtomicAndConflictsServerValidated(t
 }
 
 func TestLegacySessionStatusUpdatesShareTheScheduleLockAndGuardCancelledReopen(t *testing.T) {
-	content, err := os.ReadFile("../../../../supabase/migrations/20261016081200_add_multi_slot_training_bookings.sql")
+	content, err := os.ReadFile("../../../../supabase/migrations/20261016093515_multi_slot_training_bookings.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestLegacySessionStatusUpdatesShareTheScheduleLockAndGuardCancelledReopen(t
 }
 
 func TestMultiSlotMigrationRequiresAdjacentSlotsAndApprovesEverySlotTogether(t *testing.T) {
-	content, err := os.ReadFile("../../../../supabase/migrations/20261016081200_add_multi_slot_training_bookings.sql")
+	content, err := os.ReadFile("../../../../supabase/migrations/20261016093515_multi_slot_training_bookings.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestMultiSlotMigrationRequiresAdjacentSlotsAndApprovesEverySlotTogether(t *
 }
 
 func TestMultiSlotMigrationGuardsEditsToBookedSessionsAndSendsCombinedApprovalSummary(t *testing.T) {
-	content, err := os.ReadFile("../../../../supabase/migrations/20261016081200_add_multi_slot_training_bookings.sql")
+	content, err := os.ReadFile("../../../../supabase/migrations/20261016093515_multi_slot_training_bookings.sql")
 	if err != nil {
 		t.Fatal(err)
 	}

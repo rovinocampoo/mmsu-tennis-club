@@ -528,7 +528,11 @@ export default function AdminPage() {
           <Link href="/training">Public schedule</Link>
 
           {sessionState.status === "authenticated" && (
-            <Link href="/admin/approved-clients">Approved clients</Link>
+            <>
+              <Link href="/admin/approved-clients">Approved clients</Link>
+              <Link href="/admin/coaches">Coaches</Link>
+              <Link href="/admin/feedback">Feedback</Link>
+            </>
           )}
 
           <a

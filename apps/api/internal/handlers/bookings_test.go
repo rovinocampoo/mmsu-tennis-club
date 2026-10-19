@@ -37,6 +37,14 @@ type bookingStub struct {
 	createNew         bool
 	approvalCommitted bool
 	approvedClients   []training.ApprovedClientRecord
+	feedback          training.FeedbackSubmission
+	feedbackRecords   []training.FeedbackRecord
+	feedbackCalls     int
+	feedbackListCalls int
+	feedbackUpdateID  string
+	feedbackStatus    string
+	feedbackAdminID   string
+	feedbackUpdated   bool
 }
 
 func (s *bookingStub) CreateRequest(_ context.Context, request training.BookingRequest, tokenHash []byte) (string, error) {
@@ -90,6 +98,19 @@ func (s *bookingStub) ListAdminTrainingSessions(context.Context) ([]training.Adm
 func (s *bookingStub) ListApprovedClients(context.Context) ([]training.ApprovedClientRecord, error) {
 	return s.approvedClients, s.err
 }
+func (s *bookingStub) CreateFeedback(_ context.Context, submission training.FeedbackSubmission) (string, error) {
+	s.feedbackCalls++
+	s.feedback = submission
+	return "feedback-id", s.err
+}
+func (s *bookingStub) ListFeedbackSubmissions(context.Context) ([]training.FeedbackRecord, error) {
+	s.feedbackListCalls++
+	return s.feedbackRecords, s.err
+}
+func (s *bookingStub) UpdateFeedbackStatus(_ context.Context, id, status, adminID string) (bool, error) {
+	s.feedbackUpdateID, s.feedbackStatus, s.feedbackAdminID = id, status, adminID
+	return s.feedbackUpdated, s.err
+}
 func (s *bookingStub) ListAssignedTrainingSessions(context.Context, string) ([]training.AssignedTrainingSession, error) {
 	return nil, s.err
 }
@@ -101,6 +122,21 @@ func (s *bookingStub) CreateTrainingSession(context.Context, string, time.Time, 
 }
 func (s *bookingStub) UpdateTrainingSession(context.Context, string, *string, *string, *bool) error {
 	return s.err
+}
+func (s *bookingStub) ListCoaches(context.Context) ([]training.Coach, error) {
+	return nil, s.err
+}
+func (s *bookingStub) CreateCoach(context.Context, string, string, string, string) (string, error) {
+	return "coach-id", s.err
+}
+func (s *bookingStub) UpdateCoach(context.Context, string, string, string, string, string, bool) error {
+	return s.err
+}
+func (s *bookingStub) ListActiveCoaches(context.Context) ([]training.CoachDirectoryEntry, error) {
+	return nil, s.err
+}
+func (s *bookingStub) ListCoachSchedule(context.Context) ([]training.CoachScheduleSession, error) {
+	return nil, s.err
 }
 
 type notifierStub struct {
@@ -143,11 +179,10 @@ func TestBookingRequestCreatesPendingReferenceWithoutConfirming(t *testing.T) {
 	}
 }
 
-func TestBookingRequestAcceptsPhoneAndRejectsInvalidInput(t *testing.T) {
+func TestBookingRequestAcceptsOptionalContactAndRejectsInvalidInput(t *testing.T) {
 	repo := &bookingStub{createdID: "request-id"}
 	for _, body := range []string{
 		`{"session_id":"bad","full_name":"Alex","phone":"123"}`,
-		`{"session_id":"11111111-1111-4111-8111-111111111111","full_name":"Alex"}`,
 		`{"session_id":"11111111-1111-4111-8111-111111111111","full_name":"Alex","email":"bad"}`,
 		`{"session_id":"11111111-1111-4111-8111-111111111111","full_name":"Alex","phone":"123","unknown":true}`,
 	} {
@@ -161,11 +196,82 @@ func TestBookingRequestAcceptsPhoneAndRejectsInvalidInput(t *testing.T) {
 	if repo.createCalls != 0 {
 		t.Fatalf("invalid inputs created %d requests", repo.createCalls)
 	}
+
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/booking-requests", strings.NewReader(`{"session_id":"11111111-1111-4111-8111-111111111111","full_name":"Alex","phone":"+1 555 0100"}`))
 	BookingRequest(repo, nil)(w, r)
 	if w.Code != http.StatusAccepted || repo.request.Phone != "+1 555 0100" {
 		t.Fatalf("phone request response=%d %#v", w.Code, repo.request)
+	}
+
+	repo = &bookingStub{createdID: "request-id"}
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodPost, "/api/booking-requests", strings.NewReader(`{"session_id":"11111111-1111-4111-8111-111111111111","full_name":"Alex"}`))
+	BookingRequest(repo, nil)(w, r)
+	if w.Code != http.StatusAccepted || repo.createCalls != 1 {
+		t.Fatalf("no-contact request response=%d calls=%d %s", w.Code, repo.createCalls, w.Body)
+	}
+	if repo.request.Email != "" || repo.request.Phone != "" {
+		t.Fatalf("no-contact request persisted contact=%#v", repo.request)
+	}
+}
+
+func TestBookingRequestForwardsNormalizedParticipants(t *testing.T) {
+	repo := &bookingStub{createdID: "request-id"}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/booking-requests", strings.NewReader(`{"session_ids":["11111111-1111-4111-8111-111111111111"],"participants":["  Alex  ","Sam",""],"email":"alex@example.com"}`))
+	BookingRequest(repo, nil)(w, r)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("participants response=%d %s", w.Code, w.Body)
+	}
+	if len(repo.request.Participants) != 2 || repo.request.Participants[0] != "Alex" || repo.request.Participants[1] != "Sam" {
+		t.Fatalf("participants not normalized: %#v", repo.request.Participants)
+	}
+	if repo.request.FullName != "Alex, Sam" {
+		t.Fatalf("full_name fallback = %q", repo.request.FullName)
+	}
+	if repo.request.Email != "alex@example.com" {
+		t.Fatalf("email = %q", repo.request.Email)
+	}
+}
+
+func TestBookingRequestFallsBackToFullNameForOlderClients(t *testing.T) {
+	repo := &bookingStub{createdID: "request-id"}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/booking-requests", strings.NewReader(`{"session_id":"11111111-1111-4111-8111-111111111111","full_name":"  Alex Player  "}`))
+	BookingRequest(repo, nil)(w, r)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("legacy response=%d %s", w.Code, w.Body)
+	}
+	if len(repo.request.Participants) != 1 || repo.request.Participants[0] != "Alex Player" {
+		t.Fatalf("legacy participants = %#v", repo.request.Participants)
+	}
+	if repo.request.FullName != "Alex Player" {
+		t.Fatalf("legacy full_name = %q", repo.request.FullName)
+	}
+}
+
+func TestBookingRequestRejectsInvalidParticipants(t *testing.T) {
+	tooLong := `"` + strings.Repeat("a", 201) + `"`
+	tooLongCombined := `"` + strings.Repeat("b", 150) + `","` + strings.Repeat("c", 150) + `"`
+	tooMany := make([]string, maxBookingParticipants+1)
+	for index := range tooMany {
+		tooMany[index] = `"Player"`
+	}
+	for _, body := range []string{
+		`{"session_id":"11111111-1111-4111-8111-111111111111","participants":["  ",""]}`,
+		`{"session_id":"11111111-1111-4111-8111-111111111111","participants":[` + tooLong + `]}`,
+		`{"session_id":"11111111-1111-4111-8111-111111111111","participants":[` + tooLongCombined + `]}`,
+		`{"session_id":"11111111-1111-4111-8111-111111111111","participants":[` + strings.Join(tooMany, ",") + `]}`,
+		`{"session_id":"11111111-1111-4111-8111-111111111111"}`,
+	} {
+		repo := &bookingStub{createdID: "request-id"}
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/api/booking-requests", strings.NewReader(body))
+		BookingRequest(repo, nil)(w, r)
+		if w.Code != http.StatusBadRequest || repo.createCalls != 0 {
+			t.Errorf("body %s status=%d calls=%d", body, w.Code, repo.createCalls)
+		}
 	}
 }
 

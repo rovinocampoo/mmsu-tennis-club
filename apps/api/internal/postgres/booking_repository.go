@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -30,8 +31,18 @@ func (r *BookingRepository) CreateRequest(ctx context.Context, request training.
 	if err != nil {
 		return "", fmt.Errorf("encode requested training sessions: %w", err)
 	}
+	participants := request.Participants
+	if len(participants) == 0 {
+		if trimmed := strings.TrimSpace(request.FullName); trimmed != "" {
+			participants = []string{trimmed}
+		}
+	}
+	encodedParticipants, err := json.Marshal(participants)
+	if err != nil {
+		return "", fmt.Errorf("encode booking participants: %w", err)
+	}
 	var reference string
-	err = r.db.QueryRow(ctx, `SELECT public.create_public_booking_request_with_slots_token($1::jsonb, $2, $3, $4, $5)`, string(encodedIDs), request.FullName, nullable(request.Email), nullable(request.Phone), tokenHash).Scan(&reference)
+	err = r.db.QueryRow(ctx, `SELECT public.create_public_booking_request_with_participants_token($1::jsonb, $2::jsonb, $3, $4, $5)`, string(encodedIDs), string(encodedParticipants), nullable(request.Email), nullable(request.Phone), tokenHash).Scan(&reference)
 	if err != nil {
 		return "", fmt.Errorf("create public booking request: %w", err)
 	}
@@ -111,7 +122,9 @@ func (r *BookingRepository) ApproveRequest(ctx context.Context, requestID, admin
 func (r *BookingRepository) GetBookingCalendarEvent(ctx context.Context, requestID string) (training.CalendarEvent, error) {
 	var e training.CalendarEvent
 	err := r.db.QueryRow(ctx, `SELECT request_id::text, request_reference, participant_name, program_name, starts_at, ends_at, location FROM public.get_booking_calendar_event($1::uuid)`, requestID).Scan(&e.RequestID, &e.RequestReference, &e.ParticipantName, &e.ProgramName, &e.StartsAt, &e.EndsAt, &e.Location)
-	if err != nil { return training.CalendarEvent{}, fmt.Errorf("get booking calendar event: %w", err) }
+	if err != nil {
+		return training.CalendarEvent{}, fmt.Errorf("get booking calendar event: %w", err)
+	}
 	return e, nil
 }
 
@@ -267,7 +280,7 @@ func (r *BookingRepository) ListApprovedClients(ctx context.Context) ([]training
 	rows, err := r.db.Query(ctx, `
 		SELECT booking_id, player_id, player_name, player_email, player_phone,
 		       session_id, program_name, starts_at, ends_at, location, capacity,
-		       assigned_coach_id, assigned_coach_name, booking_created_at
+		       assigned_coach_id, assigned_coach_name, booking_created_at, participant_names
 		FROM public.admin_list_approved_clients()
 	`)
 	if err != nil {
@@ -278,6 +291,7 @@ func (r *BookingRepository) ListApprovedClients(ctx context.Context) ([]training
 	result := make([]training.ApprovedClientRecord, 0)
 	for rows.Next() {
 		var client training.ApprovedClientRecord
+		var participantNames []byte
 		if err := rows.Scan(
 			&client.BookingID,
 			&client.PlayerID,
@@ -293,8 +307,13 @@ func (r *BookingRepository) ListApprovedClients(ctx context.Context) ([]training
 			&client.AssignedCoachID,
 			&client.AssignedCoachName,
 			&client.BookingCreatedAt,
+			&participantNames,
 		); err != nil {
 			return nil, fmt.Errorf("scan approved client: %w", err)
+		}
+		client.ParticipantNames, err = decodeNameList(participantNames)
+		if err != nil {
+			return nil, fmt.Errorf("decode approved client participants: %w", err)
 		}
 		result = append(result, client)
 	}
@@ -303,6 +322,47 @@ func (r *BookingRepository) ListApprovedClients(ctx context.Context) ([]training
 	}
 
 	return result, nil
+}
+
+func (r *BookingRepository) CreateFeedback(ctx context.Context, submission training.FeedbackSubmission) (string, error) {
+	var id string
+	err := r.db.QueryRow(ctx, `SELECT public.submit_feedback($1, $2, $3, $4)`,
+		submission.Category, submission.Message, nullable(submission.Name), nullable(submission.Email)).Scan(&id)
+	if err != nil {
+		return "", fmt.Errorf("submit feedback: %w", err)
+	}
+	return id, nil
+}
+
+func (r *BookingRepository) ListFeedbackSubmissions(ctx context.Context) ([]training.FeedbackRecord, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, category, message, name, email, status, created_at, reviewed_at, reviewed_by
+		FROM public.admin_list_feedback_submissions()`)
+	if err != nil {
+		return nil, fmt.Errorf("list feedback submissions: %w", err)
+	}
+	defer rows.Close()
+	result := make([]training.FeedbackRecord, 0)
+	for rows.Next() {
+		var record training.FeedbackRecord
+		if err := rows.Scan(&record.ID, &record.Category, &record.Message, &record.Name, &record.Email, &record.Status, &record.CreatedAt, &record.ReviewedAt, &record.ReviewedBy); err != nil {
+			return nil, fmt.Errorf("scan feedback submission: %w", err)
+		}
+		result = append(result, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read feedback submissions: %w", err)
+	}
+	return result, nil
+}
+
+func (r *BookingRepository) UpdateFeedbackStatus(ctx context.Context, id, status, adminID string) (bool, error) {
+	var updated bool
+	err := r.db.QueryRow(ctx, `SELECT public.admin_update_feedback_status($1::uuid, $2, $3::uuid)`, id, status, adminID).Scan(&updated)
+	if err != nil {
+		return false, fmt.Errorf("update feedback status: %w", err)
+	}
+	return updated, nil
 }
 
 func (r *BookingRepository) ListAssignedTrainingSessions(ctx context.Context, coachID string) ([]training.AssignedTrainingSession, error) {
@@ -360,6 +420,18 @@ func (r *BookingRepository) CreateTrainingSessions(ctx context.Context, sessions
 	return ids, nil
 }
 
+func (r *BookingRepository) PublishTrainingSessions(ctx context.Context, startsAt, endsAt time.Time) (training.PublicationResult, error) {
+	var encoded []byte
+	if err := r.db.QueryRow(ctx, `SELECT public.admin_publish_training_sessions($1, $2)`, startsAt, endsAt).Scan(&encoded); err != nil {
+		return training.PublicationResult{}, fmt.Errorf("publish training sessions: %w", err)
+	}
+	var result training.PublicationResult
+	if err := json.Unmarshal(encoded, &result); err != nil {
+		return training.PublicationResult{}, fmt.Errorf("decode training session publication result: %w", err)
+	}
+	return result, nil
+}
+
 func (r *BookingRepository) EditTrainingSession(ctx context.Context, sessionID string, input training.TrainingSessionEditInput) error {
 	var updated bool
 	err := r.db.QueryRow(ctx, `SELECT public.admin_edit_training_session($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9)`,
@@ -381,4 +453,106 @@ func (r *BookingRepository) UpdateTrainingSession(ctx context.Context, sessionID
 		return fmt.Errorf("update training session: %w", err)
 	}
 	return nil
+}
+
+func decodeNameList(encoded []byte) ([]string, error) {
+	names := make([]string, 0)
+	if len(encoded) == 0 {
+		return names, nil
+	}
+	if err := json.Unmarshal(encoded, &names); err != nil {
+		return nil, err
+	}
+	if names == nil {
+		names = []string{}
+	}
+	return names, nil
+}
+
+func (r *BookingRepository) ListCoaches(ctx context.Context) ([]training.Coach, error) {
+	rows, err := r.db.Query(ctx, `SELECT id, full_name, email, phone, notes, is_active, created_at, updated_at, assigned_session_count FROM public.admin_list_coaches()`)
+	if err != nil {
+		return nil, fmt.Errorf("list coaches: %w", err)
+	}
+	defer rows.Close()
+	result := make([]training.Coach, 0)
+	for rows.Next() {
+		var coach training.Coach
+		if err := rows.Scan(&coach.ID, &coach.FullName, &coach.Email, &coach.Phone, &coach.Notes, &coach.IsActive, &coach.CreatedAt, &coach.UpdatedAt, &coach.AssignedSessionCount); err != nil {
+			return nil, fmt.Errorf("scan coach: %w", err)
+		}
+		result = append(result, coach)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read coaches: %w", err)
+	}
+	return result, nil
+}
+
+func (r *BookingRepository) CreateCoach(ctx context.Context, fullName, email, phone, notes string) (string, error) {
+	var id string
+	err := r.db.QueryRow(ctx, `SELECT public.admin_create_coach($1, $2, $3, $4)`,
+		fullName, nullable(email), nullable(phone), nullable(notes)).Scan(&id)
+	if err != nil {
+		return "", fmt.Errorf("create coach: %w", err)
+	}
+	return id, nil
+}
+
+func (r *BookingRepository) UpdateCoach(ctx context.Context, id, fullName, email, phone, notes string, isActive bool) error {
+	var updated bool
+	err := r.db.QueryRow(ctx, `SELECT public.admin_update_coach($1::uuid, $2, $3, $4, $5, $6)`,
+		id, fullName, nullable(email), nullable(phone), nullable(notes), isActive).Scan(&updated)
+	if err != nil {
+		return fmt.Errorf("update coach: %w", err)
+	}
+	if !updated {
+		return errors.New("coach was not updated")
+	}
+	return nil
+}
+
+func (r *BookingRepository) ListActiveCoaches(ctx context.Context) ([]training.CoachDirectoryEntry, error) {
+	rows, err := r.db.Query(ctx, `SELECT id, full_name, email, phone, notes, is_active FROM public.coach_list_coaches()`)
+	if err != nil {
+		return nil, fmt.Errorf("list coach directory: %w", err)
+	}
+	defer rows.Close()
+	result := make([]training.CoachDirectoryEntry, 0)
+	for rows.Next() {
+		var coach training.CoachDirectoryEntry
+		if err := rows.Scan(&coach.ID, &coach.FullName, &coach.Email, &coach.Phone, &coach.Notes, &coach.IsActive); err != nil {
+			return nil, fmt.Errorf("scan coach directory entry: %w", err)
+		}
+		result = append(result, coach)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read coach directory: %w", err)
+	}
+	return result, nil
+}
+
+func (r *BookingRepository) ListCoachSchedule(ctx context.Context) ([]training.CoachScheduleSession, error) {
+	rows, err := r.db.Query(ctx, `SELECT id, program_name, program_description, starts_at, ends_at, location, status, is_public, assigned_coach_id, assigned_coach_name, participant_names, confirmed_booking_count FROM public.coach_list_training_schedule()`)
+	if err != nil {
+		return nil, fmt.Errorf("list coach schedule: %w", err)
+	}
+	defer rows.Close()
+	result := make([]training.CoachScheduleSession, 0)
+	for rows.Next() {
+		var session training.CoachScheduleSession
+		var participantNames []byte
+		if err := rows.Scan(&session.ID, &session.ProgramName, &session.ProgramDescription, &session.StartsAt, &session.EndsAt, &session.Location, &session.Status, &session.IsPublic, &session.AssignedCoachID, &session.AssignedCoachName, &participantNames, &session.ConfirmedBookingCount); err != nil {
+			return nil, fmt.Errorf("scan coach schedule session: %w", err)
+		}
+		session.ParticipantNames, err = decodeNameList(participantNames)
+		if err != nil {
+			return nil, fmt.Errorf("decode coach schedule participants: %w", err)
+		}
+		result = append(result, session)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read coach schedule: %w", err)
+	}
+	return result, nil
 }
