@@ -11,6 +11,7 @@ import {
 } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { fetchWithAdminSession } from "@/lib/admin-auth-session.mjs";
+import ClubMobileMenu from "@/components/club-mobile-menu";
 import {
   adminDataReducer,
   adminSessionReducer,
@@ -517,7 +518,7 @@ export default function AdminPage() {
   return (
     <main className="admin-page">
       <header className="training-header">
-        <Link className="brand" href="/training">
+        <Link className="brand" href="/" aria-label="MMSU Tennis Club home">
           <span className="brand-mark" aria-hidden="true">
             M
           </span>
@@ -545,6 +546,7 @@ export default function AdminPage() {
             RallyLedger ↗
           </a>
         </nav>
+        <ClubMobileMenu />
       </header>
       <section className="admin-main">
         {sessionState.status === "checking" ? (

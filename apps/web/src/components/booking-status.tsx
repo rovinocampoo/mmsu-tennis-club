@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createBookingMessage, createCalendarFile, createGoogleCalendarURL, getCalendarFilename } from "@/lib/booking-confirmation.mjs";
+import ClubMobileMenu from "@/components/club-mobile-menu";
 
 type BookingStatus = {
   request_reference: string;
@@ -154,6 +155,7 @@ export default function BookingStatus() {
           <span><strong>MMSU</strong><small>TENNIS CLUB</small></span>
         </Link>
         <span className="header-note">Private booking status</span>
+        <ClubMobileMenu />
       </header>
 
       <section className="booking-status-page" aria-labelledby="booking-status-title">

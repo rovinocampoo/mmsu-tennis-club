@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { fetchWithAdminSession } from "@/lib/admin-auth-session.mjs";
+import ClubMobileMenu from "@/components/club-mobile-menu";
 import {
   calendarGrid,
   periodRange,
@@ -252,8 +253,9 @@ export default function CoachPage() {
   return (
     <main className="admin-page">
       <header className="training-header">
-        <Link className="brand" href="/training"><span className="brand-mark" aria-hidden="true">M</span><span><strong>MMSU</strong><small>TENNIS CLUB</small></span></Link>
+        <Link className="brand" href="/" aria-label="MMSU Tennis Club home"><span className="brand-mark" aria-hidden="true">M</span><span><strong>MMSU</strong><small>TENNIS CLUB</small></span></Link>
         <nav className="portal-nav" aria-label="Club navigation"><Link href="/training">Public schedule</Link><Link href="/admin">Admin</Link></nav>
+        <ClubMobileMenu />
       </header>
       <section className="admin-main coach-main">
         {authState === "checking" ? <p className="admin-state" role="status">Checking your session…</p>

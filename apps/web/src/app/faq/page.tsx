@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import FaqAccordion from "@/components/faq-accordion";
+import ClubMobileMenu from "@/components/club-mobile-menu";
 
 export const metadata: Metadata = {
   title: "FAQ | MMSU Tennis Club",
@@ -26,6 +27,7 @@ export default function FaqPage() {
           <Link href="/suggestions">Suggestions &amp; feedback</Link>
           <Link href="/coach">Coach portal</Link>
         </nav>
+        <ClubMobileMenu />
       </header>
 
       <section className="info-hero" aria-labelledby="faq-title">

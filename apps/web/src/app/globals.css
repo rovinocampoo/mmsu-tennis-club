@@ -374,6 +374,53 @@ button:disabled, input:disabled, select:disabled { cursor: not-allowed; opacity:
 .header-note a, .portal-nav a { color: #41614e; font-weight: 650; text-decoration: none; }
 .header-note a:hover, .portal-nav a:hover { color: var(--green); text-decoration: underline; text-underline-offset: 4px; }
 .portal-nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px 22px; font-size: .82rem; }
+.club-mobile-menu { display: none; position: relative; }
+.club-mobile-menu summary {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 13px;
+  border: 1px solid #d7e0d3;
+  border-radius: 8px;
+  background: #fff;
+  color: #173e2b;
+  font-size: .82rem;
+  font-weight: 750;
+  cursor: pointer;
+  list-style: none;
+}
+.club-mobile-menu summary::-webkit-details-marker { display: none; }
+.club-mobile-menu summary:focus-visible { outline: 3px solid #8aa83d; outline-offset: 3px; }
+.club-menu-icon { display: grid; width: 18px; gap: 4px; }
+.club-menu-icon i { display: block; height: 2px; border-radius: 2px; background: currentColor; }
+.club-mobile-menu-panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 10px);
+  right: 0;
+  display: grid;
+  width: min(280px, calc(100vw - 32px));
+  gap: 3px;
+  padding: 7px;
+  border: 1px solid #e0e7dc;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 16px 36px #102c1f24;
+}
+.club-mobile-menu-panel a {
+  display: flex;
+  min-height: 45px;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 6px;
+  color: #365642;
+  font-size: .85rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+.club-mobile-menu-panel a:hover { background: #f0f5e9; color: #123d2b; }
+.club-mobile-menu[open] summary { border-color: #b7c9b0; background: #f2f7ed; }
 .training-hero { min-height: 370px; }
 .hero-court { box-shadow: 0 24px 56px #153f2d25; }
 .schedule-section { max-width: 1160px; border-top-color: var(--line); }
@@ -688,8 +735,9 @@ button.calendar-day.outside-month { background: #f6f8f5; }
 
 @media (max-width: 760px) {
   .training-page, .admin-page { padding-inline: 18px; }
-  .training-header { min-height: 70px; }
-  .portal-nav { gap: 8px 12px; font-size: .72rem; }
+  .training-header { position: relative; z-index: 30; min-height: 70px; }
+  .training-header > .portal-nav, .training-header > .header-note { display: none; }
+  .club-mobile-menu { display: block; }
   .programs-section { margin-bottom: 34px; }
   .program-card { min-height: 190px; padding: 18px; }
   .schedule-toolbar { align-items: flex-start; flex-direction: column; }

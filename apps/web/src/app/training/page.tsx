@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getActiveTrainingPrograms, getUpcomingTrainingSessions, type TrainingProgram, type TrainingSession } from "@/lib/training-sessions";
 import TrainingSchedule from "@/components/training-schedule";
 import ScrollReveal from "@/components/scroll-reveal";
+import ClubMobileMenu from "@/components/club-mobile-menu";
 
 export const metadata: Metadata = {
   title: "Training Schedule | MMSU Tennis Club",
@@ -35,6 +36,7 @@ export default async function TrainingPage() {
           <span><strong>MMSU</strong><small>TENNIS CLUB</small></span>
         </Link>
         <span className="header-note"><Link href="/faq">FAQ</Link> · <Link href="/suggestions">Suggestions &amp; feedback</Link> · <Link href="/coach">Coach portal</Link> · <Link href="/admin">Club admin</Link></span>
+        <ClubMobileMenu />
       </header>
 
       <section className="training-hero" aria-labelledby="training-title">

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { fetchWithAdminSession } from "@/lib/admin-auth-session.mjs";
+import ClubMobileMenu from "@/components/club-mobile-menu";
 import styles from "./approved-clients.module.css";
 
 type ApprovedClient = {
@@ -517,7 +518,7 @@ export default function ApprovedClientsPage() {
   return (
     <main className={`admin-page ${styles.page}`}>
       <header className="training-header">
-        <Link className="brand" href="/training">
+        <Link className="brand" href="/" aria-label="MMSU Tennis Club home">
           <span className="brand-mark" aria-hidden="true">
             M
           </span>
@@ -533,6 +534,7 @@ export default function ApprovedClientsPage() {
           <Link href="/admin/feedback">Feedback</Link>
           <Link href="/training">Public schedule</Link>
         </nav>
+        <ClubMobileMenu />
       </header>
 
       <section className={`admin-main ${styles.main}`}>

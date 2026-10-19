@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import SuggestionsForm from "@/components/suggestions-form";
+import ClubMobileMenu from "@/components/club-mobile-menu";
 
 export const metadata: Metadata = {
   title: "Suggestions & Feedback | MMSU Tennis Club",
@@ -26,6 +27,7 @@ export default function SuggestionsPage() {
           <Link href="/faq">FAQ</Link>
           <Link href="/coach">Coach portal</Link>
         </nav>
+        <ClubMobileMenu />
       </header>
 
       <section className="info-hero" aria-labelledby="suggestions-title">

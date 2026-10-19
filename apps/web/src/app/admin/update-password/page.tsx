@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import ClubMobileMenu from "@/components/club-mobile-menu";
 
 const supabase = getSupabaseBrowserClient();
 
@@ -85,7 +86,7 @@ export default function UpdatePasswordPage() {
 
   return (
     <main className="admin-page">
-      <header className="training-header"><Link className="brand" href="/training"><span className="brand-mark" aria-hidden="true">M</span><span><strong>MMSU</strong><small>TENNIS CLUB</small></span></Link><span className="header-note">Admin account</span></header>
+      <header className="training-header"><Link className="brand" href="/" aria-label="MMSU Tennis Club home"><span className="brand-mark" aria-hidden="true">M</span><span><strong>MMSU</strong><small>TENNIS CLUB</small></span></Link><span className="header-note">Admin account</span><ClubMobileMenu /></header>
       <section className="admin-main">
         <div className="admin-login">
           <p className="section-kicker">PASSWORD RECOVERY</p>

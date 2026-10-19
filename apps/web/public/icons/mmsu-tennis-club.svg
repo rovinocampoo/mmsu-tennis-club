@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#fff"/>
+  <g fill="#e8f0eb" stroke="#174f39" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="172" cy="230" rx="78" ry="58" transform="rotate(-28 172 230)" stroke-width="13"/>
+    <ellipse cx="340" cy="230" rx="78" ry="58" transform="rotate(28 340 230)" stroke-width="13"/>
+  </g>
+  <g fill="none" stroke="#91aa9a" stroke-width="4" opacity=".9">
+    <path d="m116 189 111 82M101 210l108 79M93 235l91 67M132 177l-54 106M153 169l-51 122M177 169l-48 130M199 178l-44 125"/>
+    <path d="m396 189-111 82M411 210l-108 79M419 235l-91 67M380 177l54 106M359 169l51 122M335 169l48 130M313 178l44 125"/>
+  </g>
+  <g fill="none" stroke="#174f39" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m218 267 73 85M294 267l-73 85" stroke-width="17"/>
+    <path d="m218 267 73 85M294 267l-73 85" stroke="#91aa9a" stroke-width="5"/>
+  </g>
+  <circle cx="256" cy="103" r="48" fill="#c7da32" stroke="#86a723" stroke-width="8"/>
+  <path d="M238 61c-13 20-18 48-13 76m49-68c13 20 18 48 13 76" fill="none" stroke="#edf5a0" stroke-linecap="round" stroke-width="7"/>
+  <path d="M75 365h362" stroke="#91aa9a" stroke-width="7"/>
+  <text x="256" y="435" fill="#174f39" font-family="Arial, sans-serif" font-size="75" font-weight="800" letter-spacing="-5" text-anchor="middle">MMSU</text>
+  <text x="256" y="472" fill="#55745e" font-family="Arial, sans-serif" font-size="24" font-weight="700" letter-spacing="7" text-anchor="middle">TENNIS CLUB</text>
+</svg>
