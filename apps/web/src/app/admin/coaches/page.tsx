@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { fetchWithAdminSession } from "@/lib/admin-auth-session.mjs";
-import ClubMobileMenu from "@/components/club-mobile-menu";
+import AdminMobileMenu from "@/components/admin-mobile-menu";
 
 type Coach = {
   id: string;
@@ -162,7 +162,7 @@ export default function AdminCoachesPage() {
           <Link href="/admin/approved-clients">Approved clients</Link>
           <Link href="/admin/feedback">Feedback</Link>
         </nav>
-        <ClubMobileMenu />
+        <AdminMobileMenu />
       </header>
       <section className="admin-main">
         {authStatus === "checking" ? <p className="admin-state" role="status">Checking your session…</p>

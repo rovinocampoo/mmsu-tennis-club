@@ -11,7 +11,7 @@ import {
 } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { fetchWithAdminSession } from "@/lib/admin-auth-session.mjs";
-import ClubMobileMenu from "@/components/club-mobile-menu";
+import AdminMobileMenu from "@/components/admin-mobile-menu";
 import {
   adminDataReducer,
   adminSessionReducer,
@@ -546,7 +546,7 @@ export default function AdminPage() {
             RallyLedger ↗
           </a>
         </nav>
-        <ClubMobileMenu />
+        <AdminMobileMenu />
       </header>
       <section className="admin-main">
         {sessionState.status === "checking" ? (

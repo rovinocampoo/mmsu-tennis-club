@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { fetchWithAdminSession } from "@/lib/admin-auth-session.mjs";
-import ClubMobileMenu from "@/components/club-mobile-menu";
+import AdminMobileMenu from "@/components/admin-mobile-menu";
 import {
   buildFeedbackCsv,
   feedbackExportFilename,
@@ -423,7 +423,7 @@ export default function AdminFeedbackPage() {
           <Link href="/admin/coaches">Coaches</Link>
           <Link href="/training">Public schedule</Link>
         </nav>
-        <ClubMobileMenu />
+        <AdminMobileMenu />
       </header>
 
       <section className="admin-main">
