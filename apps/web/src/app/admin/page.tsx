@@ -21,6 +21,7 @@ import {
 import AdminSchedule from "@/components/admin-schedule";
 import AdminTrainingPrograms from "@/components/admin-training-programs";
 import { createAdminApprovalMessage, createCalendarFile, createGoogleCalendarURL, getCalendarFilename } from "@/lib/booking-confirmation.mjs";
+import { formatSubmittedAt } from "@/lib/admin-submission-time.mjs";
 
 type RequestRow = {
   id: string;
@@ -34,6 +35,13 @@ type RequestRow = {
   location: string;
   session_status: string;
   training_program_name?: string;
+  requested_slots?: {
+    session_id: string;
+    program_name: string;
+    starts_at: string;
+    ends_at: string;
+    location: string;
+  }[];
 };
 type Player = {
   id: string;
@@ -927,28 +935,27 @@ function RequestCard({
         {[row.email, row.phone].filter(Boolean).join(" · ") ||
           "No contact details"}
         <br />
-        Session:{" "}
-        {new Date(row.starts_at).toLocaleDateString("en-PH", {
-          timeZone: "Asia/Manila",
-        })}{" "}
-        ·{" "}
-        {new Date(row.starts_at).toLocaleTimeString("en-PH", {
-          timeZone: "Asia/Manila",
-          hour: "numeric",
-          minute: "2-digit",
-        })}
-        {row.ends_at && (
-          <>
-            {" – "}
-            {new Date(row.ends_at).toLocaleTimeString("en-PH", {
-              timeZone: "Asia/Manila",
-              hour: "numeric",
-              minute: "2-digit",
-            })}
-          </>
-        )}{" "}
-        · {row.location} · {row.session_status}
+        <strong>Submitted:</strong> {formatSubmittedAt(row.created_at)}
+        <br />
+        Session availability: {row.session_status}
       </p>
+      <div>
+        <strong>Requested sessions:</strong>
+        {row.requested_slots && row.requested_slots.length > 0 ? (
+          <ul>
+            {row.requested_slots.map((slot) => (
+              <li key={slot.session_id}>
+                    {slot.program_name} · {new Date(slot.starts_at).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium" })} ·{" "}
+                    {new Date(slot.starts_at).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}–{new Date(slot.ends_at).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })} · {slot.location}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>
+            {new Date(row.starts_at).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium" })} · {new Date(row.starts_at).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}–{row.ends_at ? new Date(row.ends_at).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" }) : ""} · {row.location}
+          </p>
+        )}
+      </div>
       <p>
         <strong>Participant-selected training program:</strong>{" "}
         {row.training_program_name || "None selected"}

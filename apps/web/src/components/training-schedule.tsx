@@ -8,6 +8,11 @@ import {
   unavailableReason,
 } from "@/lib/session-availability.mjs";
 import { scrollToElement } from "@/lib/scroll-to.mjs";
+import {
+  MAX_BOOKING_DATES,
+  MAX_BOOKING_SLOTS,
+  validateBookingSelection,
+} from "@/lib/booking-slot-selection.mjs";
 import type { TrainingProgram, TrainingSession } from "@/lib/training-sessions";
 
 type ScheduleView = "list" | "calendar";
@@ -45,16 +50,16 @@ const calendarMonth = new Intl.DateTimeFormat("en-PH", {
   year: "numeric",
 });
 
+function sessionDateKey(session: TrainingSession) {
+  return phtDateKey(new Date(session.starts_at));
+}
+
 function canRequestBooking(session: TrainingSession) {
   return (
     session.status === "open" &&
     (session.capacity === null ||
       (session.remaining_capacity !== null && session.remaining_capacity > 0))
   );
-}
-
-function sessionDateKey(session: TrainingSession) {
-  return phtDateKey(new Date(session.starts_at));
 }
 
 function SessionCard({
@@ -236,41 +241,16 @@ export default function TrainingSchedule({
     return () => window.cancelAnimationFrame(frame);
   }, [selectedSessionIDs, selectedSessions.length]);
 
-  const selectedSlotError = useMemo(() => {
-    if (selectedSessions.length !== selectedSessionIDs.length) {
-      return "One of the selected slots is no longer available. Refresh the page and select your times again.";
-    }
-    if (selectedSessions.length > 8) {
-      return "Select no more than eight consecutive slots in one request.";
-    }
-    if (selectedSessions.some((session) => !canRequestBooking(session))) {
-      return "One or more selected slots are no longer available. Remove them or refresh the schedule.";
-    }
-    if (selectedSessions.length < 2) return null;
-    const first = selectedSessions[0];
-    for (let index = 1; index < selectedSessions.length; index += 1) {
-      const previous = selectedSessions[index - 1];
-      const current = selectedSessions[index];
-      if (
-        sessionDateKey(current) !== sessionDateKey(first) ||
-        current.program_name !== first.program_name ||
-        current.location.trim().toLocaleLowerCase() !== first.location.trim().toLocaleLowerCase()
-      ) {
-        return "Choose adjacent slots from the same program, date, and location.";
-      }
-      if (Date.parse(previous.ends_at) !== Date.parse(current.starts_at)) {
-        return "Selected times must be consecutive with no gaps or overlaps.";
-      }
-    }
-    return null;
-  }, [selectedSessionIDs.length, selectedSessions]);
+  const selectedSlotError = useMemo(
+    () => validateBookingSelection(selectedSessionIDs, selectedSessions),
+    [selectedSessionIDs, selectedSessions],
+  );
 
   function toggleSessionSelection(sessionID: string) {
     setSelectedSessionIDs((current) => {
       if (current.includes(sessionID)) {
         return current.filter((id) => id !== sessionID);
       }
-      if (current.length >= 8) return current;
       return [...current, sessionID];
     });
   }
@@ -536,19 +516,34 @@ export default function TrainingSchedule({
         {selectedSessionIDs.length > 0 && (
           <div className={styles.bookingPanel} aria-live="polite">
             <div>
-              <p className="section-kicker">YOUR SELECTED TIME</p>
+              <p className="section-kicker">YOUR SELECTED SESSIONS</p>
               <h3>
-                {selectedSessions.length} slot{selectedSessions.length === 1 ? "" : "s"} selected
+                {selectedSessions.length} slot{selectedSessions.length === 1 ? "" : "s"} across{" "}
+                {new Set(selectedSessions.map(sessionDateKey)).size} date{new Set(selectedSessions.map(sessionDateKey)).size === 1 ? "" : "s"}
               </h3>
-              {selectedSessions.length > 0 && (
-                <p>
-                  {manilaDate.format(new Date(selectedSessions[0].starts_at))}
-                  {" · "}
-                  {manilaTime.format(new Date(selectedSessions[0].starts_at))}
-                  {" – "}
-                  {manilaTime.format(new Date(selectedSessions[selectedSessions.length - 1].ends_at))}
-                </p>
-              )}
+              <p>Requests can include up to {MAX_BOOKING_SLOTS} slots across {MAX_BOOKING_DATES} dates.</p>
+              <ul className={styles.selectedSlotList} aria-label="Selected training sessions">
+                {selectedSessions.map((session) => (
+                  <li className={styles.selectedSlotItem} key={session.id}>
+                    <div>
+                      <strong>{session.program_name}</strong>
+                      <span>
+                        {manilaDate.format(new Date(session.starts_at))} ·{" "}
+                        {manilaTime.format(new Date(session.starts_at))} –{" "}
+                        {manilaTime.format(new Date(session.ends_at))} · {session.location}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="admin-button secondary"
+                      onClick={() => toggleSessionSelection(session.id)}
+                      aria-label={`Remove ${session.program_name} on ${manilaDate.format(new Date(session.starts_at))}`}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
               {selectedSlotError && (
                 <p className={styles.selectionError} role="alert">{selectedSlotError}</p>
               )}

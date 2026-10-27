@@ -17,6 +17,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/rovinocampoo/mmsu-tennis-club/apps/api/internal/notifications"
+	"github.com/rovinocampoo/mmsu-tennis-club/apps/api/internal/ratelimit"
 	"github.com/rovinocampoo/mmsu-tennis-club/apps/api/internal/training"
 )
 
@@ -291,16 +292,85 @@ func TestBookingRequestRejectsInvalidParticipants(t *testing.T) {
 	}
 }
 
+func bookingRequestBodyWithSessionCount(t *testing.T, count int) string {
+	t.Helper()
+	ids := make([]string, count)
+	for index := range ids {
+		ids[index] = fmt.Sprintf("00000000-0000-4000-8000-%012d", index+1)
+	}
+	body, err := json.Marshal(map[string]any{
+		"session_ids":    ids,
+		"participants":   []string{"Alex Player"},
+		"training_focus": "22222222-2222-4222-8222-222222222222",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(body)
+}
+
+func TestBookingRequestAcceptsSixteenSlotsInOneSubmission(t *testing.T) {
+	repo := &bookingStub{createdID: "MMSU-1234567890ABCDEF"}
+	request := httptest.NewRequest(http.MethodPost, "/api/booking-requests", strings.NewReader(bookingRequestBodyWithSessionCount(t, 16)))
+	response := httptest.NewRecorder()
+	BookingRequest(repo, nil)(response, request)
+	if response.Code != http.StatusAccepted || repo.createCalls != 1 || len(repo.request.SessionIDs) != 16 {
+		t.Fatalf("status=%d calls=%d slots=%d body=%s", response.Code, repo.createCalls, len(repo.request.SessionIDs), response.Body)
+	}
+}
+
+func TestBookingRequestRejectsOversizedSlotList(t *testing.T) {
+	repo := &bookingStub{createdID: "MMSU-1234567890ABCDEF"}
+	request := httptest.NewRequest(http.MethodPost, "/api/booking-requests", strings.NewReader(bookingRequestBodyWithSessionCount(t, maxBookingSlots+1)))
+	response := httptest.NewRecorder()
+	BookingRequest(repo, nil)(response, request)
+	if response.Code != http.StatusRequestEntityTooLarge || repo.createCalls != 0 || !strings.Contains(response.Body.String(), "16 session slots") {
+		t.Fatalf("status=%d calls=%d body=%s", response.Code, repo.createCalls, response.Body)
+	}
+}
+
+func TestBookingRequestRejectsDuplicateSlotIDs(t *testing.T) {
+	repo := &bookingStub{createdID: "MMSU-1234567890ABCDEF"}
+	body := `{"session_ids":["11111111-1111-4111-8111-111111111111","11111111-1111-4111-8111-111111111111"],"participants":["Alex Player"]}`
+	request := httptest.NewRequest(http.MethodPost, "/api/booking-requests", strings.NewReader(body))
+	response := httptest.NewRecorder()
+	BookingRequest(repo, nil)(response, request)
+	if response.Code != http.StatusBadRequest || repo.createCalls != 0 || !strings.Contains(response.Body.String(), "selected more than once") {
+		t.Fatalf("status=%d calls=%d body=%s", response.Code, repo.createCalls, response.Body)
+	}
+}
+
+func TestMultiSlotSubmissionCountsOnceTowardRateLimit(t *testing.T) {
+	repo := &bookingStub{createdID: "MMSU-1234567890ABCDEF"}
+	handler := ratelimit.Middleware(ratelimit.New(2, time.Hour, 10), BookingRequest(repo, nil))
+	for attempt := 1; attempt <= 3; attempt++ {
+		request := httptest.NewRequest(http.MethodPost, "/api/booking-requests", strings.NewReader(bookingRequestBodyWithSessionCount(t, 16)))
+		request.RemoteAddr = "192.0.2.17:4000"
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if attempt <= 2 && response.Code != http.StatusAccepted {
+			t.Fatalf("attempt %d status=%d body=%s", attempt, response.Code, response.Body)
+		}
+		if attempt == 3 && (response.Code != http.StatusTooManyRequests || !strings.Contains(response.Body.String(), "too many requests")) {
+			t.Fatalf("rapid repeated request status=%d body=%s", response.Code, response.Body)
+		}
+	}
+	if repo.createCalls != 2 {
+		t.Fatalf("created requests=%d, want one per accepted HTTP submission", repo.createCalls)
+	}
+}
+
 func TestBookingRequestMapsDuplicateAndIneligibleSession(t *testing.T) {
 	for _, tc := range []struct {
-		code string
-		want int
-	}{{"PZ004", http.StatusConflict}, {"PZ001", http.StatusConflict}, {"P0002", http.StatusConflict}} {
+		code    string
+		want    int
+		message string
+	}{{"PZ004", http.StatusConflict, "matching request"}, {"PZ001", http.StatusConflict, "unavailable"}, {"P0002", http.StatusConflict, "unavailable"}, {"PZ002", http.StatusConflict, "full"}, {"PZ010", http.StatusBadRequest, "adjacent"}, {"PZ012", http.StatusRequestEntityTooLarge, "booking size limit"}} {
 		repo := &bookingStub{err: &pgconn.PgError{Code: tc.code, Message: "internal"}}
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodPost, "/api/booking-requests", strings.NewReader(`{"session_id":"11111111-1111-4111-8111-111111111111","full_name":"Alex","email":"alex@example.com"}`))
 		BookingRequest(repo, nil)(w, r)
-		if w.Code != tc.want || strings.Contains(w.Body.String(), "internal") {
+		if w.Code != tc.want || !strings.Contains(w.Body.String(), tc.message) || strings.Contains(w.Body.String(), "internal") {
 			t.Errorf("code %s response=%d %s", tc.code, w.Code, w.Body)
 		}
 	}

@@ -103,20 +103,29 @@ type CalendarEvent struct {
 }
 
 type BookingRequestRecord struct {
-	ID                  string    `json:"id"`
-	SessionID           string    `json:"session_id"`
-	FullName            string    `json:"full_name"`
-	Email               *string   `json:"email"`
-	Phone               *string   `json:"phone"`
-	Status              string    `json:"status"`
-	CreatedAt           time.Time `json:"created_at"`
-	StartsAt            time.Time `json:"starts_at"`
-	EndsAt              time.Time `json:"ends_at"`
-	Location            string    `json:"location"`
-	SessionStatus       string    `json:"session_status"`
-	TrainingFocus       string    `json:"training_focus"`
-	TrainingProgramName string    `json:"training_program_name"`
-	TrainingFocusNotes  string    `json:"training_focus_notes"`
+	ID                  string               `json:"id"`
+	SessionID           string               `json:"session_id"`
+	FullName            string               `json:"full_name"`
+	Email               *string              `json:"email"`
+	Phone               *string              `json:"phone"`
+	Status              string               `json:"status"`
+	CreatedAt           time.Time            `json:"created_at"`
+	StartsAt            time.Time            `json:"starts_at"`
+	EndsAt              time.Time            `json:"ends_at"`
+	Location            string               `json:"location"`
+	SessionStatus       string               `json:"session_status"`
+	TrainingFocus       string               `json:"training_focus"`
+	TrainingProgramName string               `json:"training_program_name"`
+	TrainingFocusNotes  string               `json:"training_focus_notes"`
+	RequestedSlots      []BookingRequestSlot `json:"requested_slots"`
+}
+
+type BookingRequestSlot struct {
+	SessionID   string    `json:"session_id"`
+	ProgramName string    `json:"program_name"`
+	StartsAt    time.Time `json:"starts_at"`
+	EndsAt      time.Time `json:"ends_at"`
+	Location    string    `json:"location"`
 }
 
 type PlayerCandidate struct {

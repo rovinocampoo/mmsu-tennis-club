@@ -81,14 +81,15 @@ func (r *BookingRepository) ListPendingRequests(ctx context.Context) ([]training
 		       requests.status, requests.created_at, requests.starts_at, requests.ends_at,
 		       requests.location, requests.session_status,
 		       COALESCE(requests.training_focus, ''), COALESCE(requests.training_focus_notes, ''),
-	       COALESCE(selected_program.name, '')
-		FROM public.list_pending_booking_requests_with_slots() AS requests
+	       COALESCE(selected_program.name, ''), requests.requested_slots
+		FROM public.admin_list_pending_booking_requests_with_slots() AS requests
 		LEFT JOIN LATERAL (
 		    SELECT program.name
 		    FROM public.admin_list_training_program_catalog() AS program
 		    WHERE program.id::text = requests.training_focus
 		    LIMIT 1
-		) AS selected_program ON true`)
+		) AS selected_program ON true
+		ORDER BY requests.created_at ASC, requests.id ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("list pending booking requests: %w", err)
 	}
@@ -96,8 +97,12 @@ func (r *BookingRepository) ListPendingRequests(ctx context.Context) ([]training
 	result := make([]training.BookingRequestRecord, 0)
 	for rows.Next() {
 		var row training.BookingRequestRecord
-		if err := rows.Scan(&row.ID, &row.SessionID, &row.FullName, &row.Email, &row.Phone, &row.Status, &row.CreatedAt, &row.StartsAt, &row.EndsAt, &row.Location, &row.SessionStatus, &row.TrainingFocus, &row.TrainingFocusNotes, &row.TrainingProgramName); err != nil {
+		var requestedSlots []byte
+		if err := rows.Scan(&row.ID, &row.SessionID, &row.FullName, &row.Email, &row.Phone, &row.Status, &row.CreatedAt, &row.StartsAt, &row.EndsAt, &row.Location, &row.SessionStatus, &row.TrainingFocus, &row.TrainingFocusNotes, &row.TrainingProgramName, &requestedSlots); err != nil {
 			return nil, fmt.Errorf("scan pending booking request: %w", err)
+		}
+		if err := json.Unmarshal(requestedSlots, &row.RequestedSlots); err != nil {
+			return nil, fmt.Errorf("decode pending booking request slots: %w", err)
 		}
 		result = append(result, row)
 	}

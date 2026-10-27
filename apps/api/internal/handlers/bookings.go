@@ -34,6 +34,7 @@ type bookingRequestInput struct {
 // maxBookingParticipants bounds the per-request participant list. The joined
 // names must also fit the 200-character booking_requests.full_name column.
 const maxBookingParticipants = 20
+const maxBookingSlots = 16
 
 // normalizeParticipants prefers the explicit participant list and falls back to
 // the single full_name still sent by older clients.
@@ -93,8 +94,12 @@ func BookingRequest(repo training.BookingRepository, logger interface{ Printf(st
 			writeBookingError(w, http.StatusBadRequest, "provide either session_id or matching session_ids")
 			return
 		}
-		if len(input.SessionIDs) < 1 || len(input.SessionIDs) > 8 {
-			writeBookingError(w, http.StatusBadRequest, "select 1 to 8 session slots")
+		if len(input.SessionIDs) < 1 {
+			writeBookingError(w, http.StatusBadRequest, "select at least one session slot")
+			return
+		}
+		if len(input.SessionIDs) > maxBookingSlots {
+			writeBookingError(w, http.StatusRequestEntityTooLarge, "booking size limit exceeded: select no more than 16 session slots across 8 dates")
 			return
 		}
 		participants := normalizeParticipants(input.Participants, input.FullName)
@@ -502,9 +507,13 @@ func writeBookingRepoError(w http.ResponseWriter, logger interface{ Printf(strin
 		case "PZ009":
 			writeBookingError(w, http.StatusConflict, "capacity cannot be lower than the number of confirmed bookings")
 		case "PZ010":
-			writeBookingError(w, http.StatusBadRequest, "select adjacent slots from the same program, date, and location")
+			writeBookingError(w, http.StatusBadRequest, "within each date, selected slots must be adjacent and from the same program and location")
 		case "PZ011":
 			writeBookingError(w, http.StatusBadRequest, "select an active training program or leave the selection empty")
+		case "PZ012":
+			writeBookingError(w, http.StatusRequestEntityTooLarge, "booking size limit exceeded: select slots on no more than 8 dates")
+		case "22023":
+			writeBookingError(w, http.StatusBadRequest, "booking details are invalid")
 		default:
 			logBookingError(logger, operation, err)
 			writeBookingError(w, http.StatusInternalServerError, "booking request could not be processed")

@@ -280,6 +280,17 @@ func TestBookingRepositoryGetsPublicStatusAndMapsExpiry(t *testing.T) {
 	}
 }
 
+func TestPendingBookingRepositoryEnforcesStableSubmissionFIFO(t *testing.T) {
+	db := &queryRowStub{queryErr: errors.New("query capture")}
+	_, _ = NewBookingRepository(db).ListPendingRequests(context.Background())
+	if !strings.Contains(db.query, "ORDER BY requests.created_at ASC, requests.id ASC") {
+		t.Fatalf("pending request query must use stable submission FIFO order: %s", db.query)
+	}
+	if !strings.Contains(db.query, "requests.requested_slots") || !strings.Contains(db.query, "admin_list_pending_booking_requests_with_slots()") {
+		t.Fatalf("pending request query must include each grouped session slot: %s", db.query)
+	}
+}
+
 func TestBookingRepositoryUsesProtectedReviewFunctions(t *testing.T) {
 	db := &queryRowStub{value: "booking-id"}
 	repo := NewBookingRepository(db)
