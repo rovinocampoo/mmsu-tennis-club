@@ -5,9 +5,14 @@ function dateParts(value) {
   if (!Number.isFinite(date.getTime())) throw new TypeError("A valid session date is required.");
   return Object.fromEntries(manilaParts.formatToParts(date).map(function (part) { return [part.type, part.value]; }));
 }
-function assertApproved(status) {
-  if (!status || status.status !== "approved") throw new TypeError("Only approved bookings can be added to a calendar.");
-  if (!status.starts_at || !status.ends_at || !status.location) throw new TypeError("Complete booking details are required.");
+function calendarSessions(status) {
+  if (!status || !["approved", "partially_decided"].includes(status.status)) throw new TypeError("Only approved bookings can be added to a calendar.");
+  const requested = Array.isArray(status.requested_sessions) ? status.requested_sessions.filter((s) => s && s.status === "approved") : [];
+  const sessions = requested.length ? requested : status.status === "approved" && status.starts_at && status.ends_at && status.location
+    ? [{ session_id: status.request_reference || "booking", program_name: status.program_name, starts_at: status.starts_at, ends_at: status.ends_at, location: status.location }] : [];
+  if (!sessions.length) throw new TypeError("No approved sessions are available for the calendar.");
+  for (const session of sessions) if (!session.starts_at || !session.ends_at || !session.location) throw new TypeError("Complete booking details are required.");
+  return sessions;
 }
 function googleDate(value) {
   const p = dateParts(value);
@@ -21,46 +26,37 @@ function icsDate(value) {
 function icsEscape(value) {
   return String(value == null ? "" : value).replace(/\\/g, "\\\\").replace(/\r?\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
 }
-function requiredURL(value) {
-  const url = new URL(value);
-  if (url.protocol !== "https:" && url.protocol !== "http:") throw new TypeError("A valid status page URL is required.");
-  return url.toString();
+export function createGoogleCalendarURLs(status) {
+  return calendarSessions(status).map((session) => {
+    const url = new URL("https://calendar.google.com/calendar/render");
+    url.searchParams.set("action", "TEMPLATE");
+    url.searchParams.set("text", "MMSU Tennis Club — " + session.program_name);
+    url.searchParams.set("dates", googleDate(session.starts_at) + "/" + googleDate(session.ends_at));
+    url.searchParams.set("ctz", MANILA_TIME_ZONE);
+    url.searchParams.set("details", "Booking confirmed by MMSU Tennis Club.\nStatus: Approved\nTime zone: Philippine Time (Asia/Manila).");
+    url.searchParams.set("location", session.location);
+    return { session_id: session.session_id || session.starts_at, program_name: session.program_name, starts_at: session.starts_at, url: url.toString() };
+  });
 }
-
 export function createGoogleCalendarURL(status) {
-  assertApproved(status);
-  const url = new URL("https://calendar.google.com/calendar/render");
-  url.searchParams.set("action", "TEMPLATE");
-  url.searchParams.set("text", "MMSU Tennis Club — " + status.program_name);
-  url.searchParams.set("dates", googleDate(status.starts_at) + "/" + googleDate(status.ends_at));
-  url.searchParams.set("ctz", MANILA_TIME_ZONE);
-  url.searchParams.set("details", "Booking confirmed by MMSU Tennis Club.\nStatus: Approved\nTime zone: Philippine Time (Asia/Manila).");
-  url.searchParams.set("location", status.location);
-  return url.toString();
+  return createGoogleCalendarURLs(status)[0].url;
 }
-
 export function createCalendarFile(status) {
-  assertApproved(status);
+  const sessions = calendarSessions(status);
   const uidSeed = String(status.request_reference || "booking").replace(/[^A-Za-z0-9._-]/g, "-");
-  const lines = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//MMSU Tennis Club//Booking Confirmation//EN",
-    "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
+  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//MMSU Tennis Club//Booking Confirmation//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH"];
+  sessions.forEach((session, index) => lines.push(
     "BEGIN:VEVENT",
-    "UID:" + uidSeed + "@mmsu-tennis-club",
+    "UID:" + uidSeed + "-" + String(session.session_id || index + 1).replace(/[^A-Za-z0-9._-]/g, "-") + "@mmsu-tennis-club",
     "DTSTAMP:" + icsDate(new Date().toISOString()),
-    "DTSTART:" + icsDate(status.starts_at),
-    "DTEND:" + icsDate(status.ends_at),
-    "SUMMARY:" + icsEscape("MMSU Tennis Club — " + status.program_name),
-    "LOCATION:" + icsEscape(status.location),
+    "DTSTART:" + icsDate(session.starts_at),
+    "DTEND:" + icsDate(session.ends_at),
+    "SUMMARY:" + icsEscape("MMSU Tennis Club — " + session.program_name),
+    "LOCATION:" + icsEscape(session.location),
     "DESCRIPTION:" + icsEscape("Confirmed booking from MMSU Tennis Club. Times are in Philippine Time (Asia/Manila)."),
-    "STATUS:CONFIRMED",
-    "END:VEVENT",
-    "END:VCALENDAR",
-    ""
-  ];
+    "STATUS:CONFIRMED", "END:VEVENT"
+  ));
+  lines.push("END:VCALENDAR", "");
   return lines.join("\r\n");
 }
 
