@@ -90,6 +90,16 @@ type PublicBookingStatus struct {
 	TrainingFocus       string
 	TrainingProgramName string
 	TrainingFocusNotes  string
+	RequestedSessions   []PublicBookingSession
+}
+
+type PublicBookingSession struct {
+	SessionID   string    `json:"session_id"`
+	ProgramName string    `json:"program_name"`
+	StartsAt    time.Time `json:"starts_at"`
+	EndsAt      time.Time `json:"ends_at"`
+	Location    string    `json:"location"`
+	Status      string    `json:"status"`
 }
 
 type CalendarEvent struct {
@@ -118,6 +128,7 @@ type BookingRequestRecord struct {
 	TrainingProgramName string               `json:"training_program_name"`
 	TrainingFocusNotes  string               `json:"training_focus_notes"`
 	RequestedSlots      []BookingRequestSlot `json:"requested_slots"`
+	ResolvedPlayerID    *string              `json:"resolved_player_id"`
 }
 
 type BookingRequestSlot struct {
@@ -126,6 +137,12 @@ type BookingRequestSlot struct {
 	StartsAt    time.Time `json:"starts_at"`
 	EndsAt      time.Time `json:"ends_at"`
 	Location    string    `json:"location"`
+	Status      string    `json:"status"`
+}
+
+type ApprovalDecision struct {
+	BookingIDs    []string `json:"booking_ids"`
+	RequestStatus string   `json:"request_status"`
 }
 
 type PlayerCandidate struct {
@@ -274,7 +291,9 @@ type BookingRepository interface {
 	ListPendingRequests(context.Context) ([]BookingRequestRecord, error)
 	SearchPlayers(context.Context, string) ([]PlayerCandidate, error)
 	ApproveRequest(context.Context, string, string, *string, bool) (string, error)
+	ApproveSelectedSessions(context.Context, string, string, *string, bool, []string) (ApprovalDecision, error)
 	RejectRequest(context.Context, string, string) error
+	RejectPendingSessions(context.Context, string, string) (string, error)
 
 	SubmitCoachAvailability(ctx context.Context, coachID, coachName string, startsAt, endsAt time.Time, notes string) (string, error)
 	ListCoachAvailability(ctx context.Context, coachID string) ([]CoachAvailability, error)

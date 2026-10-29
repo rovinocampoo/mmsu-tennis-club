@@ -29,18 +29,21 @@ type RequestRow = {
   full_name: string;
   email: string | null;
   phone: string | null;
+  status: "pending" | "partially_decided";
   created_at: string;
   starts_at: string;
   ends_at?: string;
   location: string;
   session_status: string;
   training_program_name?: string;
+  resolved_player_id?: string | null;
   requested_slots?: {
     session_id: string;
     program_name: string;
     starts_at: string;
     ends_at: string;
     location: string;
+    status: "pending" | "approved" | "rejected";
   }[];
 };
 type Player = {
@@ -344,6 +347,7 @@ export default function AdminPage() {
     action: "approve" | "reject",
     playerId?: string,
     createNew = false,
+    sessionIDs: string[] = [],
   ) {
     if (sessionState.status !== "authenticated") return;
     const requestToApprove = action === "approve" ? requests.find((request) => request.id === id) : undefined;
@@ -362,6 +366,7 @@ export default function AdminPage() {
               ? JSON.stringify({
                   player_id: playerId || "",
                   create_new: createNew,
+                  session_ids: sessionIDs,
                 })
               : "{}",
         },
@@ -371,37 +376,46 @@ export default function AdminPage() {
         "The request could not be updated.",
       );
       if (action === "approve") {
-        setApprovalNotification({ requestId: id, ...data });
-        setCalendarSync({ requestId: id, ...(data.calendar_sync || { status: "not_configured", message: "Google Calendar sync status was not returned.", retryable: false }) });
-        setNotice("Booking approved and confirmed.");
+        setApprovalNotification(data.status === "pending" ? null : { requestId: id, ...data });
+        setCalendarSync(data.status === "pending" ? null : { requestId: id, ...(data.calendar_sync || { status: "not_configured", message: "Google Calendar sync status was not returned.", retryable: false }) });
+        setNotice(data.status === "approved"
+          ? "All requested sessions are approved."
+          : data.status === "partially_decided"
+            ? "All sessions are decided; some were approved and some were rejected."
+            : "Selected sessions approved. Unselected sessions remain pending.");
+        const selectedSlot = requestToApprove?.requested_slots?.find((slot) => sessionIDs.includes(slot.session_id));
         setBookingConfirmation(
-          requestToApprove && requestToApprove.ends_at
+          requestToApprove && (selectedSlot?.ends_at || requestToApprove.ends_at)
             ? {
                 requestId: id,
                 message: createAdminApprovalMessage({
                   full_name: requestToApprove.full_name,
-                  starts_at: requestToApprove.starts_at,
-                  ends_at: requestToApprove.ends_at,
-                  location: requestToApprove.location,
+                  starts_at: selectedSlot?.starts_at || requestToApprove.starts_at,
+                  ends_at: selectedSlot?.ends_at || requestToApprove.ends_at!,
+                  location: selectedSlot?.location || requestToApprove.location,
                 }),
                 calendar: {
                   request_reference: requestToApprove.id,
                   status: "approved",
-                  program_name: "Tennis training",
-                  starts_at: requestToApprove.starts_at,
-                  ends_at: requestToApprove.ends_at,
-                  location: requestToApprove.location,
+                  program_name: selectedSlot?.program_name || "Tennis training",
+                  starts_at: selectedSlot?.starts_at || requestToApprove.starts_at,
+                  ends_at: selectedSlot?.ends_at || requestToApprove.ends_at!,
+                  location: selectedSlot?.location || requestToApprove.location,
                 },
               }
             : null,
         );
         setBookingConfirmationCopyNotice("");
       } else {
-        setApprovalNotification(null);
-        setCalendarSync(null);
+        setApprovalNotification(data.status === "partially_decided" ? { requestId: id, ...data } : null);
+        setCalendarSync(data.status === "partially_decided"
+          ? { requestId: id, ...(data.calendar_sync || { status: "not_configured", message: "Google Calendar sync status was not returned.", retryable: false }) }
+          : null);
         setBookingConfirmation(null);
         setBookingConfirmationCopyNotice("");
-        setNotice("Request rejected. No approval email was sent.");
+        setNotice(data.status === "partially_decided"
+          ? "Remaining sessions rejected. Previously approved sessions remain confirmed."
+          : "All requested sessions rejected.");
       }
       await loadRequests();
     } catch (cause) {
@@ -889,14 +903,23 @@ function RequestCard({
     action: "approve" | "reject",
     playerId?: string,
     createNew?: boolean,
+    sessionIDs?: string[],
   ) => void;
 }) {
   const [query, setQuery] = useState(row.email || row.phone || row.full_name);
   const [players, setPlayers] = useState<Player[]>([]);
   const [playerId, setPlayerId] = useState("");
   const [createNew, setCreateNew] = useState(false);
+  const [selectedSessionIDs, setSelectedSessionIDs] = useState<string[]>(() =>
+    (row.requested_slots || []).filter((slot) => slot.status === "pending").map((slot) => slot.session_id),
+  );
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setSelectedSessionIDs((row.requested_slots || []).filter((slot) => slot.status === "pending").map((slot) => slot.session_id));
+    if (row.resolved_player_id) setPlayerId(row.resolved_player_id);
+  }, [row.id, row.requested_slots, row.resolved_player_id]);
 
   async function search() {
     setSearching(true);
@@ -928,6 +951,8 @@ function RequestCard({
     }
   }
 
+  const pendingSessions = (row.requested_slots || []).filter((slot) => slot.status === "pending");
+
   return (
     <article className="admin-card">
       <h2>{row.full_name}</h2>
@@ -935,18 +960,46 @@ function RequestCard({
         {[row.email, row.phone].filter(Boolean).join(" · ") ||
           "No contact details"}
         <br />
+        <strong>Request status:</strong> {row.status.replaceAll("_", " ")}
+        <br />
         <strong>Submitted:</strong> {formatSubmittedAt(row.created_at)}
         <br />
         Session availability: {row.session_status}
       </p>
       <div>
         <strong>Requested sessions:</strong>
+        {pendingSessions.length > 0 && (
+          <button
+            className="admin-button secondary"
+            type="button"
+            disabled={busy}
+            onClick={() => setSelectedSessionIDs(
+              selectedSessionIDs.length === pendingSessions.length
+                ? []
+                : pendingSessions.map((slot) => slot.session_id),
+            )}
+          >
+            {selectedSessionIDs.length === pendingSessions.length ? "Clear selection" : "Select all pending"}
+          </button>
+        )}
         {row.requested_slots && row.requested_slots.length > 0 ? (
           <ul>
             {row.requested_slots.map((slot) => (
               <li key={slot.session_id}>
-                    {slot.program_name} · {new Date(slot.starts_at).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium" })} ·{" "}
-                    {new Date(slot.starts_at).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}–{new Date(slot.ends_at).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })} · {slot.location}
+                {slot.status === "pending" && (
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${slot.program_name} on ${new Date(slot.starts_at).toLocaleDateString("en-PH", { timeZone: "Asia/Manila" })}`}
+                    checked={selectedSessionIDs.includes(slot.session_id)}
+                    disabled={busy}
+                    onChange={(event) => setSelectedSessionIDs((current) => event.target.checked
+                      ? [...current, slot.session_id]
+                      : current.filter((id) => id !== slot.session_id))}
+                  />
+                )}{" "}
+                <strong>{slot.status === "pending" ? "Pending" : slot.status === "approved" ? "Approved" : "Rejected"}</strong>{" · "}
+                {slot.program_name} · {new Date(slot.starts_at).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium" })} ·{" "}
+                {new Date(slot.starts_at).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}–{new Date(slot.ends_at).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })} · {slot.location}
               </li>
             ))}
           </ul>
@@ -964,6 +1017,7 @@ function RequestCard({
         Search existing players
         <input
           value={query}
+          disabled={Boolean(row.resolved_player_id)}
           onChange={(event) => setQuery(event.target.value)}
           maxLength={100}
         />
@@ -972,7 +1026,7 @@ function RequestCard({
         <button
           className="admin-button secondary"
           type="button"
-          disabled={searching || query.trim().length < 2}
+          disabled={Boolean(row.resolved_player_id) || searching || query.trim().length < 2}
           onClick={search}
         >
           {searching ? "Searching…" : "Search players"}
@@ -989,6 +1043,7 @@ function RequestCard({
               <input
                 type="radio"
                 name={`player-${row.id}`}
+                disabled={Boolean(row.resolved_player_id)}
                 checked={playerId === player.id}
                 onChange={() => {
                   setPlayerId(player.id);
@@ -1006,14 +1061,16 @@ function RequestCard({
       )}
       {players.length === 0 && (
         <p className="admin-help">
-          No player selected. Search and match an existing player, or explicitly
-          create a new record from this request.
+          {row.resolved_player_id
+            ? "The previously matched player will be used for the remaining approved sessions."
+            : "No player selected. Search and match an existing player, or explicitly create a new record from this request."}
         </p>
       )}
       <label className="player-choice">
         <input
           type="checkbox"
           checked={createNew}
+          disabled={Boolean(row.resolved_player_id)}
           onChange={(event) => {
             setCreateNew(event.target.checked);
             setPlayerId("");
@@ -1029,17 +1086,17 @@ function RequestCard({
       <div className="admin-actions">
         <button
           className="admin-button"
-          disabled={busy || (!playerId && !createNew)}
-          onClick={() => onDecide(row.id, "approve", playerId, createNew)}
+          disabled={busy || selectedSessionIDs.length === 0 || (!row.resolved_player_id && !playerId && !createNew)}
+          onClick={() => onDecide(row.id, "approve", playerId, createNew, selectedSessionIDs)}
         >
-          Approve and confirm
+          Approve selected ({selectedSessionIDs.length})
         </button>
         <button
           className="admin-button secondary"
-          disabled={busy}
+          disabled={busy || pendingSessions.length === 0}
           onClick={() => onDecide(row.id, "reject")}
         >
-          Reject
+          {pendingSessions.length > 0 ? "Reject all remaining pending sessions" : "All sessions decided"}
         </button>
       </div>
     </article>

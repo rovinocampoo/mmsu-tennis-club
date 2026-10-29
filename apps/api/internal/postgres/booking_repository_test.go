@@ -110,7 +110,7 @@ type publicBookingStatusRow struct {
 }
 
 func (r publicBookingStatusRow) Scan(dest ...any) error {
-	if len(dest) != 10 {
+	if len(dest) != 11 {
 		return errors.New("unexpected public status scan destination count")
 	}
 	*dest[0].(*string) = r.status.RequestReference
@@ -123,6 +123,11 @@ func (r publicBookingStatusRow) Scan(dest ...any) error {
 	*dest[7].(*string) = r.status.TrainingFocus
 	*dest[8].(*string) = r.status.TrainingFocusNotes
 	*dest[9].(*string) = r.status.TrainingProgramName
+	requested, err := json.Marshal(r.status.RequestedSessions)
+	if err != nil {
+		return err
+	}
+	*dest[10].(*[]byte) = requested
 	return nil
 }
 
@@ -305,6 +310,17 @@ func TestBookingRepositoryUsesProtectedReviewFunctions(t *testing.T) {
 	db.value = true
 	if err := repo.RejectRequest(context.Background(), "request-id", "admin-id"); err != nil || !strings.Contains(db.query, "reject_booking_request") {
 		t.Fatalf("err=%v query=%q", err, db.query)
+	}
+}
+
+func TestBookingRepositoryApprovesOnlyRequestedSessionIDs(t *testing.T) {
+	db := &queryRowStub{value: []byte(`{"booking_ids":["booking-1"],"request_status":"pending"}`)}
+	decision, err := NewBookingRepository(db).ApproveSelectedSessions(context.Background(), "request-id", "admin-id", nil, true, []string{"session-1"})
+	if err != nil || decision.RequestStatus != "pending" || !reflect.DeepEqual(decision.BookingIDs, []string{"booking-1"}) {
+		t.Fatalf("decision=%#v err=%v", decision, err)
+	}
+	if !strings.Contains(db.query, "approve_booking_request_sessions") || !reflect.DeepEqual(db.args, []any{"request-id", "admin-id", (*string)(nil), true, `["session-1"]`}) {
+		t.Fatalf("query=%q args=%#v", db.query, db.args)
 	}
 }
 

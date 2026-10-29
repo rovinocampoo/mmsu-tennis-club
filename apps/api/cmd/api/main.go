@@ -166,7 +166,7 @@ func newAPIHandlerWithCalendar(cfg config.Config, trainingService *training.Serv
 	mux.Handle("GET /api/admin/players", protectAdmin(handlers.AdminPlayerSearch(adminBookingRepository, logger)))
 	mux.Handle("POST /api/admin/booking-requests/{id}/approve", protectAdmin(handlers.AdminApproveBookingRequestWithCalendar(adminBookingRepository, logger, calendarSyncer, approvalNotifier)))
 	mux.Handle("POST /api/admin/booking-requests/{id}/calendar/retry", protectAdmin(handlers.AdminRetryBookingCalendarSync(adminBookingRepository, calendarSyncer, logger)))
-	mux.Handle("POST /api/admin/booking-requests/{id}/reject", protectAdmin(handlers.AdminRejectBookingRequest(adminBookingRepository, logger)))
+	mux.Handle("POST /api/admin/booking-requests/{id}/reject", protectAdmin(handlers.AdminRejectBookingRequestWithCalendar(adminBookingRepository, logger, calendarSyncer, approvalNotifier)))
 	mux.Handle("POST /api/admin/booking-requests/{id}/notification/retry", protectAdmin(handlers.AdminRetryBookingApprovalNotification(approvalNotifier, logger)))
 	return mux
 }

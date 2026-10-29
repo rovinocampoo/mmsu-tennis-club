@@ -11,7 +11,6 @@ function slot(id, date, startHour, endHour) {
   return {
     id,
     program_name: "Adult Tennis",
-    program_name: "Adult Tennis",
     location: "MMSU Court 1",
     starts_at: `${date}T${String(startHour - 8).padStart(2, "0")}:00:00Z`,
     ends_at: `${date}T${String(endHour - 8).padStart(2, "0")}:00:00Z`,
@@ -30,10 +29,25 @@ test("allows adjacent slots across multiple Manila dates", () => {
   assert.equal(validateBookingSelection(sessions.map((item) => item.id), sessions), null);
 });
 
-test("rejects duplicates, gaps, conflicts, unavailable slots, and excessive dates or slots", () => {
+test("allows independent times on one date and different times across dates", () => {
+  const adjacent = [slot("a", "2026-11-01", 9, 10), slot("b", "2026-11-01", 10, 11)];
+  const separateTimes = [adjacent[0], slot("b", "2026-11-01", 13, 14)];
+  assert.equal(validateBookingSelection(["a", "b"], separateTimes), null);
+  const multipleDates = [adjacent[0], slot("b", "2026-11-08", 15, 16)];
+  assert.equal(validateBookingSelection(["a", "b"], multipleDates), null);
+});
+
+test("requires one program and location per grouped request", () => {
+  const adjacent = [slot("a", "2026-11-01", 9, 10), slot("b", "2026-11-01", 10, 11)];
+  const differentProgram = [adjacent[0], { ...adjacent[1], program_name: "Junior Tennis" }];
+  assert.match(validateBookingSelection(["a", "b"], differentProgram), /same training program and location/);
+  const differentLocation = [adjacent[0], { ...adjacent[1], location: "MMSU Court 2" }];
+  assert.match(validateBookingSelection(["a", "b"], differentLocation), /same training program and location/);
+});
+
+test("rejects duplicates, overlaps, unavailable slots, and excessive dates or slots", () => {
   const adjacent = [slot("a", "2026-11-01", 9, 10), slot("b", "2026-11-01", 10, 11)];
   assert.match(validateBookingSelection(["a", "a"], adjacent), /selected more than once/);
-  assert.match(validateBookingSelection(["a", "b"], [adjacent[0], slot("b", "2026-11-01", 11, 12)]), /adjacent/);
   const overlapping = [slot("a", "2026-11-01", 9, 11), slot("b", "2026-11-01", 10, 12)];
   assert.match(validateBookingSelection(["a", "b"], overlapping), /overlap/);
   const overnightConflict = [

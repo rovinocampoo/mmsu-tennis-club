@@ -7,7 +7,7 @@ import ClubMobileMenu from "@/components/club-mobile-menu";
 
 type BookingStatus = {
   request_reference: string;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "partially_decided" | "approved" | "rejected";
   program_name: string;
   starts_at: string;
   ends_at: string;
@@ -16,6 +16,14 @@ type BookingStatus = {
   training_focus: string;
   training_program_name?: string;
   training_focus_notes: string;
+  requested_sessions?: {
+    session_id: string;
+    program_name: string;
+    starts_at: string;
+    ends_at: string;
+    location: string;
+    status: "pending" | "approved" | "rejected";
+  }[];
 };
 
 type Phase = "loading" | "loaded" | "invalid" | "expired" | "error";
@@ -39,7 +47,7 @@ function isBookingStatus(value: unknown): value is BookingStatus {
   const status = value as Record<string, unknown>;
   return (
     typeof status.request_reference === "string" &&
-    ["pending", "approved", "rejected"].includes(String(status.status)) &&
+    ["pending", "partially_decided", "approved", "rejected"].includes(String(status.status)) &&
     typeof status.program_name === "string" &&
     typeof status.starts_at === "string" &&
     typeof status.ends_at === "string" &&
@@ -48,6 +56,7 @@ function isBookingStatus(value: unknown): value is BookingStatus {
     status.next_steps.every((step) => typeof step === "string") &&
     typeof status.training_focus === "string" &&
     typeof status.training_focus_notes === "string"
+    && (status.requested_sessions === undefined || Array.isArray(status.requested_sessions))
   );
 }
 
@@ -210,9 +219,23 @@ export default function BookingStatus() {
             </div>
             <h2>{status.program_name}</h2>
             <dl className="booking-status-details">
-              <div><dt>Date</dt><dd>{manilaDate.format(new Date(status.starts_at))}</dd></div>
-              <div><dt>Time</dt><dd>{manilaTime.format(new Date(status.starts_at))} – {manilaTime.format(new Date(status.ends_at))} (PHT)</dd></div>
-              <div><dt>Location</dt><dd>{status.location}</dd></div>
+              {status.requested_sessions?.length ? (
+                <div>
+                  <dt>Requested sessions</dt>
+                  <dd><ul>{status.requested_sessions.map((session) => (
+                    <li key={session.session_id}>
+                      <strong>{session.status === "pending" ? "Pending" : session.status === "approved" ? "Approved" : "Rejected"}</strong>{" · "}
+                      {session.program_name} · {manilaDate.format(new Date(session.starts_at))} · {manilaTime.format(new Date(session.starts_at))}–{manilaTime.format(new Date(session.ends_at))} · {session.location}
+                    </li>
+                  ))}</ul></dd>
+                </div>
+              ) : (
+                <>
+                  <div><dt>Date</dt><dd>{manilaDate.format(new Date(status.starts_at))}</dd></div>
+                  <div><dt>Time</dt><dd>{manilaTime.format(new Date(status.starts_at))} – {manilaTime.format(new Date(status.ends_at))} (PHT)</dd></div>
+                  <div><dt>Location</dt><dd>{status.location}</dd></div>
+                </>
+              )}
               {(status.training_program_name || status.training_focus_notes) && (
                 <div>
                   {status.training_program_name && (

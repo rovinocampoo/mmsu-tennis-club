@@ -38,14 +38,11 @@ export function validateBookingSelection(selectedIDs, sessions) {
 
   const programName = sessions[0].program_name;
   const location = sessions[0].location.trim().toLocaleLowerCase();
-  if (
-    sessions.some(
-      (session) =>
-        session.program_name !== programName ||
-        session.location.trim().toLocaleLowerCase() !== location,
-    )
-  ) {
-    return "Choose slots from the same training program and location.";
+  if (sessions.some((session) =>
+    session.program_name !== programName ||
+    session.location.trim().toLocaleLowerCase() !== location,
+  )) {
+    return "Choose sessions from the same training program and location.";
   }
 
   const chronological = [...sessions].sort((left, right) => left.starts_at.localeCompare(right.starts_at));
@@ -58,18 +55,5 @@ export function validateBookingSelection(selectedIDs, sessions) {
     latestEnd = Math.max(latestEnd, Date.parse(chronological[index].ends_at));
   }
 
-  const sessionsByDate = new Map();
-  for (const session of sessions) {
-    const date = manilaDateKey(session.starts_at);
-    sessionsByDate.set(date, [...(sessionsByDate.get(date) || []), session]);
-  }
-  for (const dateSessions of sessionsByDate.values()) {
-    dateSessions.sort((left, right) => left.starts_at.localeCompare(right.starts_at));
-    for (let index = 1; index < dateSessions.length; index += 1) {
-      if (Date.parse(dateSessions[index - 1].ends_at) !== Date.parse(dateSessions[index].starts_at)) {
-        return "On each date, selected slots must be adjacent with no gaps or overlaps.";
-      }
-    }
-  }
   return null;
 }

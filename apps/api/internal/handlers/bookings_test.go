@@ -22,31 +22,32 @@ import (
 )
 
 type bookingStub struct {
-	request           training.BookingRequest
-	tokenHash         []byte
-	createdID         string
-	err               error
-	status            training.PublicBookingStatus
-	statusErr         error
-	createCalls       int
-	statusCalls       int
-	listCalls         int
-	searchCalls       int
-	approveCalls      int
-	rejectCalls       int
-	adminID           string
-	playerID          *string
-	createNew         bool
-	approvalCommitted bool
-	approvedClients   []training.ApprovedClientRecord
-	feedback          training.FeedbackSubmission
-	feedbackRecords   []training.FeedbackRecord
-	feedbackCalls     int
-	feedbackListCalls int
-	feedbackUpdateID  string
-	feedbackStatus    string
-	feedbackAdminID   string
-	feedbackUpdated   bool
+	request            training.BookingRequest
+	tokenHash          []byte
+	createdID          string
+	err                error
+	status             training.PublicBookingStatus
+	statusErr          error
+	createCalls        int
+	statusCalls        int
+	listCalls          int
+	searchCalls        int
+	approveCalls       int
+	rejectCalls        int
+	adminID            string
+	playerID           *string
+	createNew          bool
+	approvalCommitted  bool
+	selectedSessionIDs []string
+	approvedClients    []training.ApprovedClientRecord
+	feedback           training.FeedbackSubmission
+	feedbackRecords    []training.FeedbackRecord
+	feedbackCalls      int
+	feedbackListCalls  int
+	feedbackUpdateID   string
+	feedbackStatus     string
+	feedbackAdminID    string
+	feedbackUpdated    bool
 }
 
 func (s *bookingStub) CreateRequest(_ context.Context, request training.BookingRequest, tokenHash []byte) (string, error) {
@@ -74,10 +75,25 @@ func (s *bookingStub) ApproveRequest(_ context.Context, _, adminID string, playe
 	s.approvalCommitted = s.err == nil
 	return "booking-ref", s.err
 }
+func (s *bookingStub) ApproveSelectedSessions(_ context.Context, _, adminID string, playerID *string, createNew bool, sessionIDs []string) (training.ApprovalDecision, error) {
+	s.approveCalls++
+	s.adminID, s.playerID, s.createNew = adminID, playerID, createNew
+	s.selectedSessionIDs = append([]string(nil), sessionIDs...)
+	s.approvalCommitted = s.err == nil
+	return training.ApprovalDecision{BookingIDs: []string{"booking-ref"}, RequestStatus: "pending"}, s.err
+}
 func (s *bookingStub) RejectRequest(_ context.Context, _, adminID string) error {
 	s.rejectCalls++
 	s.adminID = adminID
 	return s.err
+}
+func (s *bookingStub) RejectPendingSessions(_ context.Context, _, adminID string) (string, error) {
+	s.rejectCalls++
+	s.adminID = adminID
+	if s.err != nil {
+		return "", s.err
+	}
+	return "rejected", nil
 }
 func (s *bookingStub) SubmitCoachAvailability(context.Context, string, string, time.Time, time.Time, string) (string, error) {
 	return "avail-id", s.err
@@ -365,7 +381,7 @@ func TestBookingRequestMapsDuplicateAndIneligibleSession(t *testing.T) {
 		code    string
 		want    int
 		message string
-	}{{"PZ004", http.StatusConflict, "matching request"}, {"PZ001", http.StatusConflict, "unavailable"}, {"P0002", http.StatusConflict, "unavailable"}, {"PZ002", http.StatusConflict, "full"}, {"PZ010", http.StatusBadRequest, "adjacent"}, {"PZ012", http.StatusRequestEntityTooLarge, "booking size limit"}} {
+	}{{"PZ004", http.StatusConflict, "matching request"}, {"PZ001", http.StatusConflict, "unavailable"}, {"P0002", http.StatusConflict, "unavailable"}, {"PZ002", http.StatusConflict, "full"}, {"PZ010", http.StatusBadRequest, "valid request"}, {"PZ012", http.StatusRequestEntityTooLarge, "booking size limit"}, {"PZ013", http.StatusBadRequest, "overlap"}, {"PZ014", http.StatusConflict, "no longer pending"}, {"PZ015", http.StatusBadRequest, "share a training program"}} {
 		repo := &bookingStub{err: &pgconn.PgError{Code: tc.code, Message: "internal"}}
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodPost, "/api/booking-requests", strings.NewReader(`{"session_id":"11111111-1111-4111-8111-111111111111","full_name":"Alex","email":"alex@example.com"}`))
@@ -373,6 +389,30 @@ func TestBookingRequestMapsDuplicateAndIneligibleSession(t *testing.T) {
 		if w.Code != tc.want || !strings.Contains(w.Body.String(), tc.message) || strings.Contains(w.Body.String(), "internal") {
 			t.Errorf("code %s response=%d %s", tc.code, w.Code, w.Body)
 		}
+	}
+}
+
+func TestAdminCanApproveOnlySelectedPendingSessions(t *testing.T) {
+	repo := &bookingStub{}
+	sessionID := "33333333-3333-4333-8333-333333333333"
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/admin/booking-requests/22222222-2222-4222-8222-222222222222/approve", strings.NewReader(`{"create_new":true,"session_ids":["`+sessionID+`"]}`))
+	r.SetPathValue("id", "22222222-2222-4222-8222-222222222222")
+	AdminApproveBookingRequest(repo, nil)(w, r)
+	if w.Code != http.StatusOK || repo.approveCalls != 1 || len(repo.selectedSessionIDs) != 1 || repo.selectedSessionIDs[0] != sessionID || !strings.Contains(w.Body.String(), `"status":"pending"`) {
+		t.Fatalf("status=%d body=%s repo=%#v", w.Code, w.Body, repo)
+	}
+}
+
+func TestAdminApprovalRejectsDuplicateSelectedSessions(t *testing.T) {
+	id := "33333333-3333-4333-8333-333333333333"
+	repo := &bookingStub{}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/admin/booking-requests/22222222-2222-4222-8222-222222222222/approve", strings.NewReader(`{"create_new":true,"session_ids":["`+id+`","`+id+`"]}`))
+	r.SetPathValue("id", "22222222-2222-4222-8222-222222222222")
+	AdminApproveBookingRequest(repo, nil)(w, r)
+	if w.Code != http.StatusBadRequest || repo.approveCalls != 0 {
+		t.Fatalf("status=%d calls=%d body=%s", w.Code, repo.approveCalls, w.Body)
 	}
 }
 

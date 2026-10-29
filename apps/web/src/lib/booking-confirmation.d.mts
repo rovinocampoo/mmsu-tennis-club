@@ -1,6 +1,6 @@
 export type BookingCalendarData = {
   request_reference: string;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "partially_decided" | "approved" | "rejected";
   program_name: string;
   starts_at: string;
   ends_at: string;

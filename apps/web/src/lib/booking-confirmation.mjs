@@ -104,6 +104,16 @@ export function createBookingMessage(status, statusPageURL) {
     ].join("\n");
   }
 
+  if (status.status === "partially_decided") {
+    return [
+      "🎾 MMSU TENNIS CLUB — BOOKING UPDATE",
+      "",
+      "Some sessions in your request were approved and others were not.",
+      "Review each session's decision here: " + pageURL,
+      "Reference: " + status.request_reference,
+    ].join("\n");
+  }
+
   return [
     "🎾 MMSU TENNIS CLUB — REQUEST RECEIVED",
     "",

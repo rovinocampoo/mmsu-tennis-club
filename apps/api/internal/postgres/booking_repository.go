@@ -52,22 +52,26 @@ func (r *BookingRepository) CreateRequest(ctx context.Context, request training.
 func (r *BookingRepository) GetPublicStatus(ctx context.Context, tokenHash []byte) (training.PublicBookingStatus, error) {
 	var status training.PublicBookingStatus
 	var expired bool
+	var requestedSessions []byte
 	err := r.db.QueryRow(ctx, `
 		SELECT status.request_reference, status.request_status, status.program_name,
 		       status.starts_at, status.ends_at, status.location, status.is_expired,
 		       COALESCE(status.training_focus, ''), COALESCE(status.training_focus_notes, ''),
-		       COALESCE(public.get_training_program_name(status.training_focus), '')
+		       COALESCE(public.get_training_program_name(status.training_focus), ''), status.requested_sessions
 		FROM public.get_public_booking_status($1) AS status
 		`, tokenHash).Scan(
 		&status.RequestReference, &status.Status, &status.ProgramName,
 		&status.StartsAt, &status.EndsAt, &status.Location, &expired,
-		&status.TrainingFocus, &status.TrainingFocusNotes, &status.TrainingProgramName,
+		&status.TrainingFocus, &status.TrainingFocusNotes, &status.TrainingProgramName, &requestedSessions,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return training.PublicBookingStatus{}, training.ErrBookingStatusNotFound
 	}
 	if err != nil {
 		return training.PublicBookingStatus{}, fmt.Errorf("get public booking status: %w", err)
+	}
+	if err := json.Unmarshal(requestedSessions, &status.RequestedSessions); err != nil {
+		return training.PublicBookingStatus{}, fmt.Errorf("decode public booking sessions: %w", err)
 	}
 	if expired {
 		return training.PublicBookingStatus{}, training.ErrBookingStatusExpired
@@ -81,7 +85,8 @@ func (r *BookingRepository) ListPendingRequests(ctx context.Context) ([]training
 		       requests.status, requests.created_at, requests.starts_at, requests.ends_at,
 		       requests.location, requests.session_status,
 		       COALESCE(requests.training_focus, ''), COALESCE(requests.training_focus_notes, ''),
-	       COALESCE(selected_program.name, ''), requests.requested_slots
+		       COALESCE(selected_program.name, ''), requests.requested_slots,
+		       requests.resolved_player_id
 		FROM public.admin_list_pending_booking_requests_with_slots() AS requests
 		LEFT JOIN LATERAL (
 		    SELECT program.name
@@ -98,7 +103,7 @@ func (r *BookingRepository) ListPendingRequests(ctx context.Context) ([]training
 	for rows.Next() {
 		var row training.BookingRequestRecord
 		var requestedSlots []byte
-		if err := rows.Scan(&row.ID, &row.SessionID, &row.FullName, &row.Email, &row.Phone, &row.Status, &row.CreatedAt, &row.StartsAt, &row.EndsAt, &row.Location, &row.SessionStatus, &row.TrainingFocus, &row.TrainingFocusNotes, &row.TrainingProgramName, &requestedSlots); err != nil {
+		if err := rows.Scan(&row.ID, &row.SessionID, &row.FullName, &row.Email, &row.Phone, &row.Status, &row.CreatedAt, &row.StartsAt, &row.EndsAt, &row.Location, &row.SessionStatus, &row.TrainingFocus, &row.TrainingFocusNotes, &row.TrainingProgramName, &requestedSlots, &row.ResolvedPlayerID); err != nil {
 			return nil, fmt.Errorf("scan pending booking request: %w", err)
 		}
 		if err := json.Unmarshal(requestedSlots, &row.RequestedSlots); err != nil {
@@ -141,6 +146,23 @@ func (r *BookingRepository) ApproveRequest(ctx context.Context, requestID, admin
 	return bookingID, nil
 }
 
+func (r *BookingRepository) ApproveSelectedSessions(ctx context.Context, requestID, adminID string, playerID *string, createNew bool, sessionIDs []string) (training.ApprovalDecision, error) {
+	encodedIDs, err := json.Marshal(sessionIDs)
+	if err != nil {
+		return training.ApprovalDecision{}, fmt.Errorf("encode selected booking sessions: %w", err)
+	}
+	var raw []byte
+	err = r.db.QueryRow(ctx, `SELECT public.approve_booking_request_sessions($1::uuid, $2::uuid, $3::uuid, $4, $5::jsonb)`, requestID, adminID, playerID, createNew, string(encodedIDs)).Scan(&raw)
+	if err != nil {
+		return training.ApprovalDecision{}, fmt.Errorf("approve selected booking sessions: %w", err)
+	}
+	var result training.ApprovalDecision
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return training.ApprovalDecision{}, fmt.Errorf("decode selected booking approval: %w", err)
+	}
+	return result, nil
+}
+
 func (r *BookingRepository) GetBookingCalendarEvent(ctx context.Context, requestID string) (training.CalendarEvent, error) {
 	var e training.CalendarEvent
 	err := r.db.QueryRow(ctx, `SELECT request_id::text, request_reference, participant_name, program_name, starts_at, ends_at, location FROM public.get_booking_calendar_event($1::uuid)`, requestID).Scan(&e.RequestID, &e.RequestReference, &e.ParticipantName, &e.ProgramName, &e.StartsAt, &e.EndsAt, &e.Location)
@@ -157,6 +179,15 @@ func (r *BookingRepository) RejectRequest(ctx context.Context, requestID, adminI
 		return fmt.Errorf("reject booking request: %w", err)
 	}
 	return nil
+}
+
+func (r *BookingRepository) RejectPendingSessions(ctx context.Context, requestID, adminID string) (string, error) {
+	var status string
+	err := r.db.QueryRow(ctx, `SELECT public.admin_reject_pending_booking_sessions($1::uuid, $2::uuid)`, requestID, adminID).Scan(&status)
+	if err != nil {
+		return "", fmt.Errorf("reject pending booking sessions: %w", err)
+	}
+	return status, nil
 }
 
 func (r *BookingRepository) ClaimApprovalNotification(ctx context.Context, requestID string, resendConfigured bool) (notifications.Claim, error) {

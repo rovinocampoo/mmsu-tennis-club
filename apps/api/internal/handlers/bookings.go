@@ -171,16 +171,17 @@ type publicBookingStatusInput struct {
 }
 
 type publicBookingStatusResponse struct {
-	RequestReference    string   `json:"request_reference"`
-	Status              string   `json:"status"`
-	ProgramName         string   `json:"program_name"`
-	StartsAt            string   `json:"starts_at"`
-	EndsAt              string   `json:"ends_at"`
-	Location            string   `json:"location"`
-	NextSteps           []string `json:"next_steps"`
-	TrainingFocus       string   `json:"training_focus"`
-	TrainingProgramName string   `json:"training_program_name"`
-	TrainingFocusNotes  string   `json:"training_focus_notes"`
+	RequestReference    string                          `json:"request_reference"`
+	Status              string                          `json:"status"`
+	ProgramName         string                          `json:"program_name"`
+	StartsAt            string                          `json:"starts_at"`
+	EndsAt              string                          `json:"ends_at"`
+	Location            string                          `json:"location"`
+	NextSteps           []string                        `json:"next_steps"`
+	TrainingFocus       string                          `json:"training_focus"`
+	TrainingProgramName string                          `json:"training_program_name"`
+	TrainingFocusNotes  string                          `json:"training_focus_notes"`
+	RequestedSessions   []training.PublicBookingSession `json:"requested_sessions"`
 }
 
 func PublicBookingStatus(repo training.BookingRepository, logger interface{ Printf(string, ...any) }) http.HandlerFunc {
@@ -216,9 +217,10 @@ func PublicBookingStatus(repo training.BookingRepository, logger interface{ Prin
 			return
 		}
 		nextSteps := map[string][]string{
-			"pending":  {"A club admin will review your request. Wait for a decision; this is not a confirmed booking."},
-			"approved": {"Your request is approved. Please arrive at the scheduled time and check in with the club."},
-			"rejected": {"This request was not approved. You may contact the club or submit a request for another session."},
+			"pending":           {"A club admin will review your remaining sessions. Each session is decided separately."},
+			"partially_decided": {"Some sessions were approved and some were not. Review each session below."},
+			"approved":          {"Your requested sessions are approved. Please arrive at the scheduled times and check in with the club."},
+			"rejected":          {"This request was not approved. You may contact the club or submit a request for another session."},
 		}[status.Status]
 		if nextSteps == nil {
 			logBookingError(logger, "get public booking status", errors.New("unknown booking status"))
@@ -236,6 +238,7 @@ func PublicBookingStatus(repo training.BookingRepository, logger interface{ Prin
 			TrainingFocus:       status.TrainingFocus,
 			TrainingProgramName: status.TrainingProgramName,
 			TrainingFocusNotes:  status.TrainingFocusNotes,
+			RequestedSessions:   status.RequestedSessions,
 		})
 	}
 }
@@ -310,8 +313,9 @@ func AdminPlayerSearch(repo training.BookingRepository, logger interface{ Printf
 }
 
 type approveRequestInput struct {
-	PlayerID  string `json:"player_id"`
-	CreateNew bool   `json:"create_new"`
+	PlayerID   string   `json:"player_id"`
+	CreateNew  bool     `json:"create_new"`
+	SessionIDs []string `json:"session_ids"`
 }
 
 type CalendarSyncer interface {
@@ -366,9 +370,29 @@ func AdminApproveBookingRequestWithCalendar(repo training.BookingRepository, log
 			return
 		}
 		input.PlayerID = strings.ToLower(strings.TrimSpace(input.PlayerID))
-		if (input.PlayerID == "") == !input.CreateNew || (input.PlayerID != "" && !validUUID(input.PlayerID)) {
+		if len(input.SessionIDs) > 16 {
+			writeBookingError(w, http.StatusRequestEntityTooLarge, "select no more than 16 sessions at a time")
+			return
+		}
+		if len(input.SessionIDs) == 0 && (input.PlayerID == "") == !input.CreateNew ||
+			(len(input.SessionIDs) > 0 && input.PlayerID != "" && input.CreateNew) ||
+			(input.PlayerID != "" && !validUUID(input.PlayerID)) {
 			writeBookingError(w, http.StatusBadRequest, "choose an existing player or explicitly create a new player")
 			return
+		}
+		seenSessions := make(map[string]struct{}, len(input.SessionIDs))
+		for index, sessionID := range input.SessionIDs {
+			sessionID = strings.ToLower(strings.TrimSpace(sessionID))
+			if !validUUID(sessionID) {
+				writeBookingError(w, http.StatusBadRequest, "one or more selected session IDs are invalid")
+				return
+			}
+			if _, exists := seenSessions[sessionID]; exists {
+				writeBookingError(w, http.StatusBadRequest, "a session was selected more than once")
+				return
+			}
+			seenSessions[sessionID] = struct{}{}
+			input.SessionIDs[index] = sessionID
 		}
 		var playerID *string
 		if input.PlayerID != "" {
@@ -376,29 +400,42 @@ func AdminApproveBookingRequestWithCalendar(repo training.BookingRepository, log
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		_, err := repo.ApproveRequest(ctx, requestID, adminauth.UserID(r.Context()), playerID, input.CreateNew)
+		var decision training.ApprovalDecision
+		var err error
+		if len(input.SessionIDs) > 0 {
+			decision, err = repo.ApproveSelectedSessions(ctx, requestID, adminauth.UserID(r.Context()), playerID, input.CreateNew, input.SessionIDs)
+		} else {
+			var bookingID string
+			bookingID, err = repo.ApproveRequest(ctx, requestID, adminauth.UserID(r.Context()), playerID, input.CreateNew)
+			decision = training.ApprovalDecision{BookingIDs: []string{bookingID}, RequestStatus: "approved"}
+		}
 		if err != nil {
 			writeBookingRepoError(w, logger, "approve booking request", err)
 			return
 		}
-		calendarCtx, calendarCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 12*time.Second)
-		calendarResult := syncCalendar(calendarCtx, repo, syncer, requestID, logger)
-		calendarCancel()
-		result := notifications.Result{
-			Status:    notifications.StatusNotConfigured,
-			Message:   "Approval was saved, but Resend is unavailable. Please contact the requester manually.",
-			Retryable: true,
-		}
-		if len(notifiers) > 0 && notifiers[0] != nil {
-			notificationCtx, notificationCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 12*time.Second)
-			result = notifiers[0].NotifyApproved(notificationCtx, requestID)
-			notificationCancel()
+		calendarResult := calendarSyncOutcome{"not_configured", "The remaining request sessions are still pending.", false}
+		result := notifications.Result{Status: notifications.StatusNotConfigured, Message: "This approval is saved; approval notifications run after all requested sessions are decided.", Retryable: false}
+		if decision.RequestStatus == "approved" || decision.RequestStatus == "partially_decided" {
+			calendarCtx, calendarCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 12*time.Second)
+			calendarResult = syncCalendar(calendarCtx, repo, syncer, requestID, logger)
+			calendarCancel()
+			result = notifications.Result{
+				Status:    notifications.StatusNotConfigured,
+				Message:   "Approval was saved, but Resend is unavailable. Please contact the requester manually.",
+				Retryable: true,
+			}
+			if len(notifiers) > 0 && notifiers[0] != nil {
+				notificationCtx, notificationCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 12*time.Second)
+				result = notifiers[0].NotifyApproved(notificationCtx, requestID)
+				notificationCancel()
+			}
 		}
 		writeJSON(w, http.StatusOK, struct {
-			Status       string              `json:"status"`
-			CalendarSync calendarSyncOutcome `json:"calendar_sync"`
+			Status        string              `json:"status"`
+			ApprovedCount int                 `json:"approved_count"`
+			CalendarSync  calendarSyncOutcome `json:"calendar_sync"`
 			notifications.Result
-		}{Status: "approved", CalendarSync: calendarResult, Result: result})
+		}{Status: decision.RequestStatus, ApprovedCount: len(decision.BookingIDs), CalendarSync: calendarResult, Result: result})
 	}
 }
 
@@ -443,6 +480,10 @@ func loggerBookingNotificationError(logger interface{ Printf(string, ...any) }) 
 }
 
 func AdminRejectBookingRequest(repo training.BookingRepository, logger interface{ Printf(string, ...any) }) http.HandlerFunc {
+	return AdminRejectBookingRequestWithCalendar(repo, logger, nil)
+}
+
+func AdminRejectBookingRequestWithCalendar(repo training.BookingRepository, logger interface{ Printf(string, ...any) }, syncer CalendarSyncer, notifiers ...notifications.ApprovalNotifier) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if repo == nil {
 			writeBookingError(w, http.StatusServiceUnavailable, "booking requests are temporarily unavailable")
@@ -455,11 +496,29 @@ func AdminRejectBookingRequest(repo training.BookingRepository, logger interface
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		if err := repo.RejectRequest(ctx, requestID, adminauth.UserID(r.Context())); err != nil {
+		status, err := repo.RejectPendingSessions(ctx, requestID, adminauth.UserID(r.Context()))
+		if err != nil {
 			writeBookingRepoError(w, logger, "reject booking request", err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "rejected"})
+		calendarResult := calendarSyncOutcome{"not_configured", "No approved sessions need calendar sync.", false}
+		result := notifications.Result{Status: notifications.StatusNotConfigured, Message: "No approval notification is needed.", Retryable: false}
+		if status == "partially_decided" {
+			calendarCtx, calendarCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 12*time.Second)
+			calendarResult = syncCalendar(calendarCtx, repo, syncer, requestID, logger)
+			calendarCancel()
+			result = notifications.Result{Status: notifications.StatusNotConfigured, Message: "Previously approved sessions remain confirmed; the request-level approval notice is prepared.", Retryable: true}
+			if len(notifiers) > 0 && notifiers[0] != nil {
+				notificationCtx, notificationCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 12*time.Second)
+				result = notifiers[0].NotifyApproved(notificationCtx, requestID)
+				notificationCancel()
+			}
+		}
+		writeJSON(w, http.StatusOK, struct {
+			Status       string              `json:"status"`
+			CalendarSync calendarSyncOutcome `json:"calendar_sync"`
+			notifications.Result
+		}{Status: status, CalendarSync: calendarResult, Result: result})
 	}
 }
 
@@ -507,11 +566,17 @@ func writeBookingRepoError(w http.ResponseWriter, logger interface{ Printf(strin
 		case "PZ009":
 			writeBookingError(w, http.StatusConflict, "capacity cannot be lower than the number of confirmed bookings")
 		case "PZ010":
-			writeBookingError(w, http.StatusBadRequest, "within each date, selected slots must be adjacent and from the same program and location")
+			writeBookingError(w, http.StatusBadRequest, "the selected sessions are not a valid request")
 		case "PZ011":
 			writeBookingError(w, http.StatusBadRequest, "select an active training program or leave the selection empty")
 		case "PZ012":
 			writeBookingError(w, http.StatusRequestEntityTooLarge, "booking size limit exceeded: select slots on no more than 8 dates")
+		case "PZ013":
+			writeBookingError(w, http.StatusBadRequest, "selected sessions overlap; choose different times")
+		case "PZ014":
+			writeBookingError(w, http.StatusConflict, "one or more selected sessions are no longer pending")
+		case "PZ015":
+			writeBookingError(w, http.StatusBadRequest, "sessions in one request must share a training program and location")
 		case "22023":
 			writeBookingError(w, http.StatusBadRequest, "booking details are invalid")
 		default:
