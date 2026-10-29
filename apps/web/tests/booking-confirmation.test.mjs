@@ -82,3 +82,24 @@ test("admin confirmation message tells requester to visit status page instead of
   assert.doesNotMatch(message, /https:\/\/calendar\.google\.com/);
   assert.doesNotMatch(message, /https:\/\/mmsu-tennis-club\.vercel\.app\/booking-status/);
 });
+
+test("multi-date calendar exports include only individually approved sessions", async () => {
+  const { createGoogleCalendarURLs } = await import("../src/lib/booking-confirmation.mjs");
+  const multi = { ...approved, status: "partially_decided", requested_sessions: [
+    { session_id: "session-a", program_name: "Tennis Fundamentals", starts_at: "2026-10-20T21:30:00Z", ends_at: "2026-10-20T23:00:00Z", location: "Court 1", status: "approved" },
+    { session_id: "session-b", program_name: "Tennis Fundamentals", starts_at: "2026-10-27T21:30:00Z", ends_at: "2026-10-27T23:00:00Z", location: "Court 2", status: "pending" },
+    { session_id: "session-c", program_name: "Tennis Fundamentals", starts_at: "2026-11-03T21:30:00Z", ends_at: "2026-11-03T23:00:00Z", location: "Court 3", status: "approved" },
+    { session_id: "session-d", program_name: "Tennis Fundamentals", starts_at: "2026-11-10T21:30:00Z", ends_at: "2026-11-10T23:00:00Z", location: "Court 4", status: "rejected" },
+  ] };
+  const links = createGoogleCalendarURLs(multi);
+  assert.equal(links.length, 2);
+  assert.deepEqual(links.map((entry) => entry.session_id), ["session-a", "session-c"]);
+  assert.equal(new URL(links[0].url).searchParams.get("location"), "Court 1");
+  assert.equal(new URL(links[1].url).searchParams.get("location"), "Court 3");
+  const file = createCalendarFile(multi);
+  assert.equal((file.match(/BEGIN:VEVENT/g) || []).length, 2);
+  assert.match(file, /LOCATION:Court 1/);
+  assert.match(file, /LOCATION:Court 3/);
+  assert.doesNotMatch(file, /Court 2|Court 4/);
+  assert.throws(() => createCalendarFile({ ...multi, requested_sessions: multi.requested_sessions.map((s) => ({ ...s, status: "pending" })) }), /No approved sessions/);
+});
