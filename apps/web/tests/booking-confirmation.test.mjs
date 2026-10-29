@@ -56,6 +56,20 @@ test("admin approval copy contains schedule details and an add-to-calendar link"
   assert.doesNotMatch(message, /opaqueToken/);
 });
 
+test("admin approval copy lists every session approved in one action", () => {
+  const message = createAdminApprovalMessage({
+    full_name: "Rovin Ocampo",
+    sessions: [
+      { starts_at: "2026-10-20T21:30:00Z", ends_at: "2026-10-20T23:00:00Z", location: "MMSU Tennis Court 1" },
+      { starts_at: "2026-10-27T23:00:00Z", ends_at: "2026-10-28T00:00:00Z", location: "MMSU Tennis Court 2" },
+    ],
+  });
+  assert.match(message, /^🎾 MMSU TENNIS CLUB — BOOKING CONFIRMED/);
+  assert.match(message, /Hi Rovin Ocampo,/);
+  assert.match(message, /Wed, Oct 21, 2026[\s\S]*5:30 AM–7:00 AM PHT[\s\S]*MMSU Tennis Court 1/);
+  assert.match(message, /Wed, Oct 28, 2026[\s\S]*7:00 AM–8:00 AM PHT[\s\S]*MMSU Tennis Court 2/);
+});
+
 test("calendar actions require approval and filenames are sanitized", () => {
   assert.throws(() => createGoogleCalendarURL({ ...approved, status: "pending" }), /Only approved/);
   assert.throws(() => createCalendarFile({ ...approved, status: "pending" }), /Only approved/);

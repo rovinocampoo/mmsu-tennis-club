@@ -51,6 +51,12 @@ func New(file, calendarID string) *Client {
 }
 func (c *Client) IsConfigured() bool { return c != nil && c.file != "" && c.calendarID != "" }
 func eventID(id string) string       { return "mmsu" + strings.ReplaceAll(strings.ToLower(id), "-", "") }
+func syncEventID(e training.CalendarEvent) string {
+	if e.EventID != "" {
+		return e.EventID
+	}
+	return eventID(e.RequestID)
+}
 
 type eventTime struct {
 	DateTime string `json:"dateTime"`
@@ -77,7 +83,8 @@ func (c *Client) Sync(ctx context.Context, e training.CalendarEvent) error {
 		return err
 	}
 	pht := time.FixedZone("Asia/Manila", 8*60*60)
-	p := eventPayload{ID: eventID(e.RequestID), Summary: e.ParticipantName + " — " + e.ProgramName, Description: fmt.Sprintf("MMSU Tennis Club booking\nReference: %s\nParticipant: %s", e.RequestReference, e.ParticipantName), Location: e.Location, Start: eventTime{e.StartsAt.In(pht).Format(time.RFC3339), "Asia/Manila"}, End: eventTime{e.EndsAt.In(pht).Format(time.RFC3339), "Asia/Manila"}}
+	id := syncEventID(e)
+	p := eventPayload{ID: id, Summary: e.ParticipantName + " — " + e.ProgramName, Description: fmt.Sprintf("MMSU Tennis Club booking\nReference: %s\nParticipant: %s", e.RequestReference, e.ParticipantName), Location: e.Location, Start: eventTime{e.StartsAt.In(pht).Format(time.RFC3339), "Asia/Manila"}, End: eventTime{e.EndsAt.In(pht).Format(time.RFC3339), "Asia/Manila"}}
 	body, _ := json.Marshal(p)
 	endpoint := apiURL + "/calendars/" + url.PathEscape(c.calendarID) + "/events"
 	status, err := c.request(ctx, http.MethodPost, endpoint, tok, body)
@@ -87,7 +94,7 @@ func (c *Client) Sync(ctx context.Context, e training.CalendarEvent) error {
 	if status == http.StatusConflict {
 		p.ID = ""
 		body, _ = json.Marshal(p)
-		status, err = c.request(ctx, http.MethodPatch, endpoint+"/"+url.PathEscape(eventID(e.RequestID)), tok, body)
+		status, err = c.request(ctx, http.MethodPatch, endpoint+"/"+url.PathEscape(id), tok, body)
 		if err != nil {
 			return err
 		}

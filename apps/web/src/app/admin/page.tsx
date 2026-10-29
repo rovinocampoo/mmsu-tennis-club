@@ -383,16 +383,23 @@ export default function AdminPage() {
           : data.status === "partially_decided"
             ? "All sessions are decided; some were approved and some were rejected."
             : "Selected sessions approved. Unselected sessions remain pending.");
-        const selectedSlot = requestToApprove?.requested_slots?.find((slot) => sessionIDs.includes(slot.session_id));
+        const approvedSlots = requestToApprove?.requested_slots?.filter((slot) =>
+          slot.status === "pending" && sessionIDs.includes(slot.session_id),
+        ) || [];
+        const selectedSlot = approvedSlots[0];
         setBookingConfirmation(
           requestToApprove && (selectedSlot?.ends_at || requestToApprove.ends_at)
             ? {
                 requestId: id,
                 message: createAdminApprovalMessage({
                   full_name: requestToApprove.full_name,
-                  starts_at: selectedSlot?.starts_at || requestToApprove.starts_at,
-                  ends_at: selectedSlot?.ends_at || requestToApprove.ends_at!,
-                  location: selectedSlot?.location || requestToApprove.location,
+                  ...(approvedSlots.length > 0
+                    ? { sessions: approvedSlots }
+                    : {
+                        starts_at: requestToApprove.starts_at,
+                        ends_at: requestToApprove.ends_at!,
+                        location: requestToApprove.location,
+                      }),
                 }),
                 calendar: {
                   request_reference: requestToApprove.id,

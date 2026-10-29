@@ -75,3 +75,19 @@ func TestPerSessionApprovalMigrationIsAtomicAndRestricted(t *testing.T) {
 		t.Fatal("request decision constraint must accept partial decisions while requiring complete decision fields")
 	}
 }
+
+func TestCalendarEventLookupReturnsOnlyApprovedSessionsWithStablePerSessionIDs(t *testing.T) {
+	content, err := os.ReadFile("../../../../supabase/migrations/20261029110000_list_approved_booking_calendar_events.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql := string(content)
+	for _, expected := range []string{"rs.status = 'approved'", "s.starts_at, s.ends_at, s.location", "row_number() OVER (ORDER BY rs.decided_at, rs.session_id)", "replace(rs.session_id::text, '-', '')", "SECURITY DEFINER SET search_path = ''", "TO mmsu_booking_admin_api"} {
+		if !strings.Contains(sql, expected) {
+			t.Errorf("calendar event lookup missing %q", expected)
+		}
+	}
+	if strings.Contains(sql, "min(s.starts_at)") || strings.Contains(sql, "max(s.ends_at)") {
+		t.Fatal("calendar event lookup must return each approved session's actual interval")
+	}
+}

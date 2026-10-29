@@ -163,13 +163,24 @@ func (r *BookingRepository) ApproveSelectedSessions(ctx context.Context, request
 	return result, nil
 }
 
-func (r *BookingRepository) GetBookingCalendarEvent(ctx context.Context, requestID string) (training.CalendarEvent, error) {
-	var e training.CalendarEvent
-	err := r.db.QueryRow(ctx, `SELECT request_id::text, request_reference, participant_name, program_name, starts_at, ends_at, location FROM public.get_booking_calendar_event($1::uuid)`, requestID).Scan(&e.RequestID, &e.RequestReference, &e.ParticipantName, &e.ProgramName, &e.StartsAt, &e.EndsAt, &e.Location)
+func (r *BookingRepository) GetBookingCalendarEvents(ctx context.Context, requestID string) ([]training.CalendarEvent, error) {
+	rows, err := r.db.Query(ctx, `SELECT event_id, request_id::text, request_reference, participant_name, program_name, starts_at, ends_at, location FROM public.list_booking_calendar_events($1::uuid)`, requestID)
 	if err != nil {
-		return training.CalendarEvent{}, fmt.Errorf("get booking calendar event: %w", err)
+		return nil, fmt.Errorf("list booking calendar events: %w", err)
 	}
-	return e, nil
+	defer rows.Close()
+	var events []training.CalendarEvent
+	for rows.Next() {
+		var e training.CalendarEvent
+		if err := rows.Scan(&e.EventID, &e.RequestID, &e.RequestReference, &e.ParticipantName, &e.ProgramName, &e.StartsAt, &e.EndsAt, &e.Location); err != nil {
+			return nil, fmt.Errorf("read booking calendar event: %w", err)
+		}
+		events = append(events, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read booking calendar events: %w", err)
+	}
+	return events, nil
 }
 
 func (r *BookingRepository) RejectRequest(ctx context.Context, requestID, adminID string) error {

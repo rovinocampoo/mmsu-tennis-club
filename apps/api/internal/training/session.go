@@ -103,6 +103,7 @@ type PublicBookingSession struct {
 }
 
 type CalendarEvent struct {
+	EventID          string
 	RequestID        string
 	RequestReference string
 	ParticipantName  string

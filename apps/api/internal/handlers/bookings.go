@@ -323,7 +323,7 @@ type CalendarSyncer interface {
 	Sync(context.Context, training.CalendarEvent) error
 }
 type calendarEventRepository interface {
-	GetBookingCalendarEvent(context.Context, string) (training.CalendarEvent, error)
+	GetBookingCalendarEvents(context.Context, string) ([]training.CalendarEvent, error)
 }
 type calendarSyncOutcome struct {
 	Status    string `json:"status"`
@@ -339,9 +339,15 @@ func syncCalendar(ctx context.Context, repo training.BookingRepository, syncer C
 	if !ok {
 		return calendarSyncOutcome{"failed", "Calendar booking details could not be loaded. Retry the sync.", true}
 	}
-	e, err := r.GetBookingCalendarEvent(ctx, id)
-	if err == nil {
-		err = syncer.Sync(ctx, e)
+	events, err := r.GetBookingCalendarEvents(ctx, id)
+	if err == nil && len(events) == 0 {
+		err = errors.New("no approved booking sessions were found")
+	}
+	for _, event := range events {
+		if err != nil {
+			break
+		}
+		err = syncer.Sync(ctx, event)
 	}
 	if err != nil {
 		if logger != nil {
@@ -349,7 +355,7 @@ func syncCalendar(ctx context.Context, repo training.BookingRepository, syncer C
 		}
 		return calendarSyncOutcome{"failed", "Booking approved, but Google Calendar sync failed. You can retry.", true}
 	}
-	return calendarSyncOutcome{"synced", "Booking successfully added to Google Calendar.", false}
+	return calendarSyncOutcome{"synced", "Approved sessions successfully added to Google Calendar.", false}
 }
 func AdminApproveBookingRequest(repo training.BookingRepository, logger interface{ Printf(string, ...any) }, notifiers ...notifications.ApprovalNotifier) http.HandlerFunc {
 	return AdminApproveBookingRequestWithCalendar(repo, logger, nil, notifiers...)

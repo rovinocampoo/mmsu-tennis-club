@@ -126,30 +126,28 @@ export function createBookingMessage(status, statusPageURL) {
 }
 
 export function createAdminApprovalMessage(request) {
-  if (!request || !request.ends_at) throw new TypeError("A confirmed session end time is required.");
+  const sessions = Array.isArray(request?.sessions) && request.sessions.length > 0 ? request.sessions : [request];
+  if (!request || sessions.some((session) => !session?.ends_at)) throw new TypeError("A confirmed session end time is required.");
   const name = String(request.full_name || "there").replace(/[\r\n]+/g, " ").trim() || "there";
-  const status = {
-    status: "approved",
-    request_reference: "MMSU Tennis Club",
-    program_name: "Tennis training",
-    starts_at: request.starts_at,
-    ends_at: request.ends_at,
-    location: request.location
-  };
   const dateFmt = new Intl.DateTimeFormat("en-PH", { timeZone: MANILA_TIME_ZONE, weekday: "short", month: "short", day: "numeric", year: "numeric" });
   const timeFmt = new Intl.DateTimeFormat("en-PH", { timeZone: MANILA_TIME_ZONE, hour: "numeric", minute: "2-digit", hour12: true });
-  const startsAt = new Date(request.starts_at);
-  const endsAt = new Date(request.ends_at);
-  if (!Number.isFinite(startsAt.getTime()) || !Number.isFinite(endsAt.getTime())) throw new TypeError("A valid session date is required.");
+  const schedule = sessions.map((session) => {
+    const startsAt = new Date(session.starts_at);
+    const endsAt = new Date(session.ends_at);
+    if (!Number.isFinite(startsAt.getTime()) || !Number.isFinite(endsAt.getTime())) throw new TypeError("A valid session date is required.");
+    return [
+      "📅 " + dateFmt.format(startsAt),
+      "🕒 " + timeFmt.format(startsAt) + "–" + timeFmt.format(endsAt) + " PHT",
+      "📍 " + session.location
+    ].join("\n");
+  });
   return [
     "🎾 MMSU TENNIS CLUB — BOOKING CONFIRMED",
     "",
     "Hi " + name + ",",
     "Your tennis training booking has been approved!",
     "",
-    "📅 " + dateFmt.format(startsAt),
-    "🕒 " + timeFmt.format(startsAt) + "–" + timeFmt.format(endsAt) + " PHT",
-    "📍 " + request.location,
+    schedule.join("\n\n"),
     "",
     "Visit your private booking status page to add this booking to your calendar and check for updates.",
     "",
