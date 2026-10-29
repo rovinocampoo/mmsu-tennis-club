@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { createBookingMessage, createCalendarFile, createGoogleCalendarURL, getCalendarFilename } from "@/lib/booking-confirmation.mjs";
+import { createBookingMessage, createCalendarFile, createGoogleCalendarURLs, getCalendarFilename } from "@/lib/booking-confirmation.mjs";
 import ClubMobileMenu from "@/components/club-mobile-menu";
 
 type BookingStatus = {
@@ -115,7 +115,9 @@ export default function BookingStatus() {
     };
   }, [attempt]);
 
-  const calendarURL = status && status.status === "approved" ? createGoogleCalendarURL(status) : "";
+  const calendarLinks = status && ["approved", "partially_decided"].includes(status.status)
+    ? (() => { try { return createGoogleCalendarURLs(status); } catch { return []; } })()
+    : [];
 
   async function copyBookingMessage() {
     if (!status || !statusPageURL) return;
@@ -144,7 +146,7 @@ export default function BookingStatus() {
   }
 
   function downloadCalendarFile() {
-    if (!status || status.status !== "approved") return;
+    if (!status || !["approved", "partially_decided"].includes(status.status)) return;
     const blob = new Blob([createCalendarFile(status)], { type: "text/calendar;charset=utf-8" });
     const objectURL = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -255,13 +257,15 @@ export default function BookingStatus() {
               <ul>{status.next_steps.map((step) => <li key={step}>{step}</li>)}</ul>
             </div>
             <div className="booking-actions" aria-label="Booking actions">
-              {status.status === "approved" && <div className="booking-calendar-actions">
-                <p className="booking-actions-title">Save your confirmed session</p>
-                <a className="request-submit booking-calendar-link" href={calendarURL} target="_blank" rel="noopener noreferrer">
-                  <span aria-hidden="true">▦</span> Add to Google Calendar
-                </a>
-                <button className="request-copy" type="button" onClick={downloadCalendarFile}>Download calendar file (.ics)</button>
-                <p className="request-note">Times are shown in Philippine Time (PHT).</p>
+              {calendarLinks.length > 0 && <div className="booking-calendar-actions">
+                <p className="booking-actions-title">Save approved sessions</p>
+                {calendarLinks.map((item, index) => (
+                  <a className="request-submit booking-calendar-link" href={item.url} target="_blank" rel="noopener noreferrer" key={item.session_id}>
+                    <span aria-hidden="true">▦</span> {calendarLinks.length > 1 ? "Add session " + (index + 1) + " to Google Calendar" : "Add to Google Calendar"}
+                  </a>
+                ))}
+                <button className="request-copy" type="button" onClick={downloadCalendarFile}>Download approved sessions (.ics)</button>
+                <p className="request-note">Only approved sessions are included. Times are in Philippine Time (PHT).</p>
               </div>}
               <div className="booking-message-actions">
                 <button className="request-copy" type="button" onClick={() => void copyBookingMessage()}>
