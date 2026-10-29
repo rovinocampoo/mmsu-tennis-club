@@ -234,6 +234,8 @@ h1 {
 .admin-card { max-width: none; }
 .admin-card h2 { margin: 0; color: var(--green); font: 750 1.1rem Manrope,sans-serif; }
 .admin-card > p { color: #68766e; font-size: .86rem; }
+.admin-card .booking-session-row { display: flex; align-items: flex-start; gap: 8px; }
+.admin-card input.booking-session-checkbox { flex: 0 0 16px; width: 16px; height: 16px; min-height: 16px; margin: 2px 0 0; padding: 0; accent-color: var(--green); }
 .admin-card .admin-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .admin-button.secondary { background: white; color: var(--green); }
 .player-results { display: grid; gap: 7px; max-height: 220px; overflow: auto; }

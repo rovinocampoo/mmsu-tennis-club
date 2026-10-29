@@ -985,9 +985,10 @@ function RequestCard({
         {row.requested_slots && row.requested_slots.length > 0 ? (
           <ul>
             {row.requested_slots.map((slot) => (
-              <li key={slot.session_id}>
+              <li className="booking-session-row" key={slot.session_id}>
                 {slot.status === "pending" && (
                   <input
+                    className="booking-session-checkbox"
                     type="checkbox"
                     aria-label={`Select ${slot.program_name} on ${new Date(slot.starts_at).toLocaleDateString("en-PH", { timeZone: "Asia/Manila" })}`}
                     checked={selectedSessionIDs.includes(slot.session_id)}
@@ -996,10 +997,12 @@ function RequestCard({
                       ? [...current, slot.session_id]
                       : current.filter((id) => id !== slot.session_id))}
                   />
-                )}{" "}
-                <strong>{slot.status === "pending" ? "Pending" : slot.status === "approved" ? "Approved" : "Rejected"}</strong>{" · "}
-                {slot.program_name} · {new Date(slot.starts_at).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium" })} ·{" "}
-                {new Date(slot.starts_at).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}–{new Date(slot.ends_at).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })} · {slot.location}
+                )}
+                <span>
+                  <strong>{slot.status === "pending" ? "Pending" : slot.status === "approved" ? "Approved" : "Rejected"}</strong>{" · "}
+                  {slot.program_name} · {new Date(slot.starts_at).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium" })} ·{" "}
+                  {new Date(slot.starts_at).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}–{new Date(slot.ends_at).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })} · {slot.location}
+                </span>
               </li>
             ))}
           </ul>
