@@ -26,7 +26,11 @@ export default function Home() {
           <Link href="/suggestions">Suggestions</Link>
           <details className="home-mobile-menu">
             <summary>
-              <span className="home-menu-icon" aria-hidden="true"><i /><i /><i /></span>
+              <span className="home-menu-icon" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
               <span>Menu</span>
             </summary>
             <div className="home-mobile-menu-panel">
@@ -277,7 +281,7 @@ export default function Home() {
           </span>
         </Link>
 
-        <p>MADE FOR THE LOVE OF THE GAME.</p>
+        <p>MADE FOR THE LOVE OF THE GAME. Developed by Kharl Rovin Ocampo.</p>
 
         <nav aria-label="Footer navigation">
           <Link href="/training">Training</Link>
