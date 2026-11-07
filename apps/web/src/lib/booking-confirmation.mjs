@@ -60,30 +60,64 @@ export function createCalendarFile(status) {
   return lines.join("\r\n");
 }
 
+function requiredURL(value) {
+  if (typeof value !== "string" || !value.trim()) throw new TypeError("A booking status page URL is required.");
+  let url;
+  try { url = new URL(value); } catch { throw new TypeError("A valid booking status page URL is required."); }
+  if (url.protocol !== "https:" && url.protocol !== "http:") throw new TypeError("A valid booking status page URL is required.");
+  return url.toString();
+}
+
 export function createBookingMessage(status, statusPageURL) {
+  if (!status || !["pending", "partially_decided", "approved", "rejected"].includes(status.status)) {
+    throw new TypeError("A valid booking status is required.");
+  }
   const pageURL = requiredURL(statusPageURL);
-  const startsAt = new Date(status.starts_at);
-  const endsAt = new Date(status.ends_at);
-  if (!Number.isFinite(startsAt.getTime()) || !Number.isFinite(endsAt.getTime())) throw new TypeError("A valid session date is required.");
   const timeFmt = new Intl.DateTimeFormat("en-PH", { timeZone: MANILA_TIME_ZONE, hour: "numeric", minute: "2-digit", hour12: true });
   const dateFmt = new Intl.DateTimeFormat("en-PH", { timeZone: MANILA_TIME_ZONE, weekday: "short", month: "short", day: "numeric", year: "numeric" });
-  const schedule = dateFmt.format(startsAt) + "\n" + timeFmt.format(startsAt) + "–" + timeFmt.format(endsAt) + " PHT\n" + status.location;
+  const requested = Array.isArray(status.requested_sessions) ? status.requested_sessions : [];
+  const sessions = requested.length ? requested : [{
+    session_id: status.request_reference || "booking",
+    program_name: status.program_name,
+    starts_at: status.starts_at,
+    ends_at: status.ends_at,
+    location: status.location,
+    status: status.status,
+  }];
+  const scheduleLines = sessions.map((session) => {
+    const startsAt = new Date(session.starts_at);
+    const endsAt = new Date(session.ends_at);
+    if (!Number.isFinite(startsAt.getTime()) || !Number.isFinite(endsAt.getTime())) {
+      throw new TypeError("A valid session date is required.");
+    }
+    if (!session.location) throw new TypeError("A session location is required.");
+    const decision = session.status || status.status;
+    const label = decision === "approved" ? "Approved" : decision === "rejected" ? "Not approved" : "Pending";
+    return [
+      "• " + label + " — " + (session.program_name || status.program_name),
+      dateFmt.format(startsAt),
+      timeFmt.format(startsAt) + "–" + timeFmt.format(endsAt) + " PHT",
+      session.location,
+    ].join("\n");
+  });
+  const schedule = scheduleLines.join("\n\n");
+  const reference = "Reference: " + (status.request_reference || "Not available");
 
   if (status.status === "approved") {
+    const calendarLinks = createGoogleCalendarURLs(status);
     return [
       "🎾 MMSU TENNIS CLUB — BOOKING CONFIRMED",
       "",
-      "Your " + status.program_name + " booking has been approved!",
+      "Your " + (status.program_name || "tennis training") + " booking has been approved!",
       "",
-      "📅 " + dateFmt.format(startsAt),
-      "🕒 " + timeFmt.format(startsAt) + "–" + timeFmt.format(endsAt) + " PHT",
-      "📍 " + status.location,
-      "Reference: " + status.request_reference,
+      "Approved schedule:",
+      schedule,
+      reference,
       "",
-      "➕ Add to Google Calendar: " + createGoogleCalendarURL(status),
+      ...calendarLinks.map((item, index) => "➕ Add approved session " + (index + 1) + " to Google Calendar: " + item.url),
       "Booking details and latest updates: " + pageURL,
       "",
-      "See you on court! 🎾"
+      "See you on court! 🎾",
     ].join("\n");
   }
 
@@ -91,12 +125,13 @@ export function createBookingMessage(status, statusPageURL) {
     return [
       "🎾 MMSU TENNIS CLUB — BOOKING UPDATE",
       "",
-      "Your request for " + status.program_name + " was not approved.",
-      "Requested schedule:\n" + schedule,
-      "Reference: " + status.request_reference,
+      "Your request for " + (status.program_name || "tennis training") + " was not approved.",
+      "Requested schedule:",
+      schedule,
+      reference,
       "",
       "View the latest update: " + pageURL,
-      "Contact the club if you need help finding another session."
+      "Contact the club if you need help finding another session.",
     ].join("\n");
   }
 
@@ -104,20 +139,24 @@ export function createBookingMessage(status, statusPageURL) {
     return [
       "🎾 MMSU TENNIS CLUB — BOOKING UPDATE",
       "",
-      "Some sessions in your request were approved and others were not.",
-      "Review each session's decision here: " + pageURL,
-      "Reference: " + status.request_reference,
+      "Your request has been partially decided. Review the status of each requested session below:",
+      schedule,
+      reference,
+      "",
+      "View the latest update: " + pageURL,
+      "Only sessions marked Approved are confirmed.",
     ].join("\n");
   }
 
   return [
     "🎾 MMSU TENNIS CLUB — REQUEST RECEIVED",
     "",
-    "Your request for " + status.program_name + " is awaiting admin approval. This is not a confirmed booking.",
-    "Requested schedule:\n" + schedule,
-    "Reference: " + status.request_reference,
+    "Your request for " + (status.program_name || "tennis training") + " is awaiting admin approval. This is not a confirmed booking.",
+    "Requested schedule:",
+    schedule,
+    reference,
     "",
-    "Check for updates here: " + pageURL
+    "Check for updates here: " + pageURL,
   ].join("\n");
 }
 

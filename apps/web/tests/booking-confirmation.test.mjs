@@ -103,3 +103,56 @@ test("multi-date calendar exports include only individually approved sessions", 
   assert.doesNotMatch(file, /Court 2|Court 4/);
   assert.throws(() => createCalendarFile({ ...multi, requested_sessions: multi.requested_sessions.map((s) => ({ ...s, status: "pending" })) }), /No approved sessions/);
 });
+
+
+test("single-session copy works with a valid status page URL", () => {
+  const message = createBookingMessage(approved, statusURL);
+  assert.match(message, /BOOKING CONFIRMED/);
+  assert.match(message, /Wed, Oct 21, 2026/);
+  assert.match(message, /MMSU Tennis Court/);
+  assert.match(message, /booking-status#opaqueToken/);
+});
+
+test("multi-session pending copy lists each requested schedule and its decision", () => {
+  const multi = {
+    ...approved,
+    status: "pending",
+    starts_at: "",
+    ends_at: "",
+    location: "",
+    requested_sessions: [
+      { session_id: "a", program_name: "Fundamentals", starts_at: "2026-10-20T21:30:00Z", ends_at: "2026-10-20T23:00:00Z", location: "Court 1", status: "pending" },
+      { session_id: "b", program_name: "Fundamentals", starts_at: "2026-10-27T21:30:00Z", ends_at: "2026-10-27T23:00:00Z", location: "Court 2", status: "pending" },
+    ],
+  };
+  const message = createBookingMessage(multi, statusURL);
+  assert.match(message, /Court 1/);
+  assert.match(message, /Court 2/);
+  assert.equal((message.match(/Pending — Fundamentals/g) || []).length, 2);
+  assert.match(message, /not a confirmed booking/i);
+});
+
+test("partially decided copy includes every session and its individual decision", () => {
+  const multi = {
+    ...approved,
+    status: "partially_decided",
+    starts_at: "",
+    ends_at: "",
+    location: "",
+    requested_sessions: [
+      { session_id: "a", program_name: "Fundamentals", starts_at: "2026-10-20T21:30:00Z", ends_at: "2026-10-20T23:00:00Z", location: "Court 1", status: "approved" },
+      { session_id: "b", program_name: "Fundamentals", starts_at: "2026-10-27T21:30:00Z", ends_at: "2026-10-27T23:00:00Z", location: "Court 2", status: "rejected" },
+      { session_id: "c", program_name: "Fundamentals", starts_at: "2026-11-03T21:30:00Z", ends_at: "2026-11-03T23:00:00Z", location: "Court 3", status: "pending" },
+    ],
+  };
+  const message = createBookingMessage(multi, statusURL);
+  assert.match(message, /Approved — Fundamentals[\s\S]*Court 1/);
+  assert.match(message, /Not approved — Fundamentals[\s\S]*Court 2/);
+  assert.match(message, /Pending — Fundamentals[\s\S]*Court 3/);
+  assert.match(message, /Only sessions marked Approved are confirmed/);
+});
+
+test("copy helper rejects invalid status URLs with a useful error", () => {
+  assert.throws(() => createBookingMessage(approved, ""), /status page URL/i);
+  assert.throws(() => createBookingMessage(approved, "javascript:alert(1)"), /status page URL/i);
+});

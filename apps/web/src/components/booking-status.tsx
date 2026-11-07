@@ -121,8 +121,14 @@ export default function BookingStatus() {
 
   async function copyBookingMessage() {
     if (!status || !statusPageURL) return;
-    const message = createBookingMessage(status, statusPageURL);
     setCopyNotice("");
+    let message: string;
+    try {
+      message = createBookingMessage(status, statusPageURL);
+    } catch {
+      setCopyNotice("We couldn't prepare the booking update. Please refresh the page and try again.");
+      return;
+    }
     try {
       await navigator.clipboard.writeText(message);
       setCopyNotice("Booking message copied. Paste it into Messenger or SMS.");
