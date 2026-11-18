@@ -183,7 +183,17 @@ export default function AdminPage() {
         response,
         "Could not load booking requests.",
       );
-      setRequests(data.requests || []);
+      setRequests(
+        (data.requests || []).filter((request: RequestRow) => {
+          const slots = request.requested_slots || [];
+          // A multi-session request belongs in this queue only while at least
+          // one requested session still needs a decision. The aggregate request
+          // status can lag behind the individual slot decisions.
+          return slots.length > 0
+            ? slots.some((slot) => slot.status === "pending")
+            : request.status === "pending";
+        }),
+      );
       dispatchAdminData({ type: "ready" });
     } catch (cause) {
       const message =
